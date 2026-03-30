@@ -15,6 +15,9 @@ app.get("/api/health", (req, res) => {
   res.json({ message: "Backend is running" });
 });
 
+console.log("MONGODB_URI exists:", !!process.env.MONGODB_URI);
+console.log("CLIENT_URL:", process.env.CLIENT_URL);
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log("MongoDB connected");
