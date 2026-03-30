@@ -1,11 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import './App.css'
+import axios from "axios";
+
+const API = import.meta.env.VITE_API_URL;
 
 function App() {
   const [count, setCount] = useState(0)
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    axios.get(`${API}/api/health`)
+      .then((res) => setMessage(res.data.message))
+      .catch((err) => console.error(err));
+  }, []);
 
   return (
     <>
@@ -19,6 +29,9 @@ function App() {
           <h1>DECO3801 Template For now!</h1>
           <p>
             Mushroom mushroom mushroom mushroom mushroom mushroom mushroom mushroom mushroom
+          </p>
+          <p>
+            Test backend connection: {message}
           </p>
         </div>
         <button
