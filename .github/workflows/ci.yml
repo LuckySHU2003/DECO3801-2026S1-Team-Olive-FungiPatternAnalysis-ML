@@ -44,7 +44,7 @@ jobs:
 
       - name: Tests placeholder
         run: |
-          if [ -d "tests" ] || [ -d "backend/tests" ] || [ -d "frontend/tests" ]; then
+          if [ -d "integration-tests" ] || [ -d "backend/tests" ] || [ -d "frontend/tests" ]; then
             echo "Test structure detected"
           else
             echo "No tests yet (ok for now)"
