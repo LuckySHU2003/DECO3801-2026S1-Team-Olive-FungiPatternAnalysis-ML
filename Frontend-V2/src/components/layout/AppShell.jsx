@@ -2,7 +2,7 @@
 // On mobile the sidebar is off-canvas and toggled via the hamburger button.
 import React from "react";
 import {
-  Brain, Bell, Search, User, CheckCircle2, Menu,
+  Brain, Bell, Search, User, CheckCircle2, Menu, GitCompare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
