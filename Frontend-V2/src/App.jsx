@@ -16,6 +16,7 @@ import Processing from "@/components/pages/Processing";
 import Results from "@/components/pages/Results";
 import Prediction from "@/components/pages/Prediction";
 import Interpretation from "@/components/pages/Interpretation";
+import CompareDatasets from "@/components/pages/CompareDatasets";
 import Models from "@/components/pages/Models";
 import History from "@/components/pages/History";
 
@@ -389,6 +390,8 @@ export default function App() {
             sheet: result.selected || "",
             rows: result.rows.length,
             columns: result.headers.length,
+            headers: result.headers,
+            tableRows: result.rows,
             uploadedAt: new Date().toISOString(),
           },
           ...prev,
@@ -401,6 +404,23 @@ export default function App() {
       console.error("File upload error:", error);
       setFileErrorOpen(true);
     }
+  };
+
+  const handleOpenUploadedDataset = (dataset) => {
+    if (!dataset) return;
+
+    setDatasetName(dataset.name || "");
+    setSelectedSheet(dataset.sheet || "");
+    setHeaders(dataset.headers || []);
+    setTableRows(dataset.tableRows || []);
+    setSignalData(buildSignalDataFromRows(dataset.tableRows || [], dataset.headers || []));
+    setHasUploadedData(true);
+
+    setPredictionData([]);
+    setAnalysisCompleted(false);
+    setPreviewPredictionSummary(null);
+
+    setPage("preview");
   };
 
   const handleSheetChange = async (sheetName) => {
@@ -473,6 +493,7 @@ export default function App() {
     }),
     [analysisSummary, signalData.length, predictionData]
   );
+
 
   const startAnalysis = () => {
     const steps = [
@@ -674,20 +695,15 @@ export default function App() {
           )}
 
           {page === "upload" && (
-            <Upload
-              key="upload"
-              setPage={setPage}
-              setUploadSuccessOpen={setUploadSuccessOpen}
-              setFileErrorOpen={setFileErrorOpen}
-              datasetName={datasetName}
-              setDatasetName={setDatasetName}
-              species={species}
-              setSpecies={setSpecies}
-              notes={notes}
-              setNotes={setNotes}
-              onFileUpload={handleFileUpload}
-            />
-          )}
+          <Upload
+            key="upload"
+            datasetName={datasetName}
+            onFileUpload={handleFileUpload}
+            uploadedDatasets={uploadedDatasets}
+            onOpenUploadedDataset={handleOpenUploadedDataset}
+            onGoToCompare={() => setPage("compare")}
+          />
+        )}
 
           {page === "preview" && (
             <Preview
@@ -791,6 +807,14 @@ export default function App() {
               key="interpretation"
               setPage={setPage}
               setRegenOpen={setRegenOpen}
+            />
+          )}
+
+          {page === "compare" && (
+            <CompareDatasets
+              key="compare"
+              setPage={setPage}
+              uploadedDatasets={uploadedDatasets}
             />
           )}
 
