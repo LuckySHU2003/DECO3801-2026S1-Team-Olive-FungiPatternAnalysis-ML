@@ -10,6 +10,7 @@ import {
   History,
   FolderKanban,
   Cpu,
+  GitCompare
 } from "lucide-react";
 
 /**
@@ -25,6 +26,7 @@ export const navItems = [
   { id: "results",        label: "Results",              icon: LineChart },
   { id: "prediction",     label: "Prediction",           icon: Brain },
   { id: "interpretation", label: "Interpretation",       icon: FileText },
+  { id: "compare",        label: "Compare Dataset",      icon: GitCompare },
   { id: "models",         label: "Model Manager",        icon: FolderKanban },
   { id: "history",        label: "Experiment History",   icon: History },
 ];
