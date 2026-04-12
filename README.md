@@ -82,7 +82,7 @@ backend/    → React (Node.js) + Express API
 
 #### Frontend
 ```bash
-cd frontend
+cd Frontend-V2
 npm install
 ```
 
