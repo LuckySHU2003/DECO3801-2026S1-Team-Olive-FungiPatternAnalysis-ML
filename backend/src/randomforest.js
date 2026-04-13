@@ -1,6 +1,6 @@
 // train_rf.js
-// Usage:
-// node train_rf.js "./backend/temp-raw-data/your_processed_file.csv"
+// from cd backend/src, run:
+// node randomforest.js "../temp-raw-data/data_processed.csv"
 
 const fs = require("fs");
 const path = require("path");
@@ -136,8 +136,8 @@ async function main() {
   console.log("Evaluation:");
   console.log(metrics);
 
-  const outputDir = path.resolve("./backend/models");
-  const modelPath = path.join(outputDir, "random_forest_model.json");
+  const outputDir = path.resolve(__dirname, "../temp-raw-data/rf_model");
+  const modelPath = path.join(outputDir, "model.json");
 
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -145,6 +145,7 @@ async function main() {
     modelPath,
     JSON.stringify(
       {
+        modelType: "random_forest",
         model: model.toJSON(),
         metadata: {
           features: FEATURES,
@@ -159,7 +160,7 @@ async function main() {
     )
   );
 
-  console.log(`Model saved to: ${modelPath}`);
+  console.log(`Model saved to ${outputDir}`);
 
   if (XTest.length > 0) {
     console.log("Sample prediction:");
