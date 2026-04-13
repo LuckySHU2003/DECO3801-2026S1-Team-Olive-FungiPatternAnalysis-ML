@@ -1,8 +1,9 @@
 // train_lstm.js
 // Usage:
-// node train_lstm.js ./backend/temp-raw-data/data.csv
+// from cd backend/src, run:
+// node lstm.js "../temp-raw-data/data_processed.csv"
 
-const tf = require("@tensorflow/tfjs-node");
+const tf = require("@tensorflow/tfjs");
 const fs = require("fs");
 const csv = require("csv-parser");
 const path = require("path");
@@ -160,10 +161,44 @@ async function main() {
   console.log("Test MAE:", mae[0]);
 
   console.log("Saving model...");
-  const savePath = "Set model path here"; // placholder for model path
-  await model.save(savePath);
+  const outputDir = path.resolve(__dirname, "../temp-raw-data/lstm_model");
+  fs.mkdirSync(outputDir, { recursive: true });
 
-  console.log(`Model saved to ${savePath}`);
+  await model.save(
+    tf.io.withSaveHandler(async (artifacts) => {
+      const modelJson = {
+        modelTopology: artifacts.modelTopology,
+        format: artifacts.format || "layers-model",
+        generatedBy: artifacts.generatedBy || "TensorFlow.js",
+        convertedBy: artifacts.convertedBy || null,
+        weightsManifest: [
+          {
+            paths: ["weights.bin"],
+            weights: artifacts.weightSpecs,
+          },
+        ],
+      };
+
+      fs.writeFileSync(
+        path.join(outputDir, "model.json"),
+        JSON.stringify(modelJson, null, 2)
+      );
+
+      if (artifacts.weightData) {
+        const weightBuffer = Buffer.from(new Uint8Array(artifacts.weightData));
+        fs.writeFileSync(path.join(outputDir, "weights.bin"), weightBuffer);
+      }
+
+      return {
+        modelArtifactsInfo: {
+          dateSaved: new Date(),
+          modelTopologyType: "JSON",
+        },
+      };
+    })
+  );
+
+  console.log(`Model saved to ${outputDir}`);
 
   console.log("Running sample prediction...");
   const sampleInput = xTest.slice([0, 0, 0], [1, WINDOW_SIZE, FEATURES.length]);
