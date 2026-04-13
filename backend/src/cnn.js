@@ -1,8 +1,9 @@
 // train_cnn.js
 // Usage:
-// node train_cnn.js "./backend/temp-raw-data/your_processed_file.csv"
+// from cd backend/src, run:
+// node cnn.js "../temp-raw-data/data_processed.csv"
 
-const tf = require("@tensorflow/tfjs-node");
+const tf = require("@tensorflow/tfjs");
 const fs = require("fs");
 const path = require("path");
 const csv = require("csv-parser");
@@ -186,12 +187,45 @@ async function main() {
   console.log("Test Loss:", loss[0]);
   console.log("Test MAE:", mae[0]);
 
-  const outputDir = path.resolve("./backend/models/cnn-model");
+  console.log("Saving model...");
+  const outputDir = path.resolve(__dirname, "../temp-raw-data/cnn_model");
   fs.mkdirSync(outputDir, { recursive: true });
 
-  console.log("Saving model...");
-  await model.save(`file://${outputDir}`);
-  console.log(`Model saved to: ${outputDir}`);
+  await model.save(
+    tf.io.withSaveHandler(async (artifacts) => {
+      const modelJson = {
+        modelTopology: artifacts.modelTopology,
+        format: artifacts.format || "layers-model",
+        generatedBy: artifacts.generatedBy || "TensorFlow.js",
+        convertedBy: artifacts.convertedBy || null,
+        weightsManifest: [
+          {
+            paths: ["weights.bin"],
+            weights: artifacts.weightSpecs,
+          },
+        ],
+      };
+
+      fs.writeFileSync(
+        path.join(outputDir, "model.json"),
+        JSON.stringify(modelJson, null, 2)
+      );
+
+      if (artifacts.weightData) {
+        const weightBuffer = Buffer.from(new Uint8Array(artifacts.weightData));
+        fs.writeFileSync(path.join(outputDir, "weights.bin"), weightBuffer);
+      }
+
+      return {
+        modelArtifactsInfo: {
+          dateSaved: new Date(),
+          modelTopologyType: "JSON",
+        },
+      };
+    })
+  );
+
+  console.log(`Model saved to ${outputDir}`);
 
   console.log("Running sample prediction...");
   const sampleInput = xTest.slice([0, 0, 0], [1, WINDOW_SIZE, FEATURES.length]);
