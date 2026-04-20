@@ -82,7 +82,7 @@ backend/    → React (Node.js) + Express API
 
 #### Frontend
 ```bash
-cd Frontend-V2
+cd frontend
 npm install
 npm install xlsx lucide-react framer-motion clsx tailwind-merge
 ```
