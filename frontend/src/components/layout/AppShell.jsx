@@ -33,7 +33,7 @@ export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, chi
               <Brain className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-semibold">MycoSignal</div>
+              <div className="text-lg font-semibold">Olive</div>
               <div className="text-xs text-slate-500">Fungal Bioelectric Signal Processor</div>
             </div>
           </div>
