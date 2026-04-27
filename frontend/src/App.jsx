@@ -4,7 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 
 import AppShell from "@/components/layout/AppShell";
-import LoginPage from "@/LoginPage";
+import Home from "@/Home";
 import AllDialogs from "@/components/dialogs/AllDialogs";
 
 // Page components
@@ -13,9 +13,7 @@ import Upload from "@/components/pages/Upload";
 import Preview from "@/components/pages/Preview";
 import Configure from "@/components/pages/Configure";
 import Processing from "@/components/pages/Processing";
-import Results from "@/components/pages/Results";
-import Prediction from "@/components/pages/Prediction";
-import Interpretation from "@/components/pages/Interpretation";
+import { AnalysisView } from '@/components/pages/AnalysisView';
 import CompareDatasets from "@/components/pages/CompareDatasets";
 import Models from "@/components/pages/Models";
 import History from "@/components/pages/History";
@@ -656,10 +654,8 @@ export default function App() {
   if (!authenticated) {
     return (
       <>
-        <LoginPage
-          onLogin={() => setAuthenticated(true)}
-          onOpenSignup={() => setSignupOpen(true)}
-          onOpenForgot={() => setForgotOpen(true)}
+        <Home
+          onGoToDashboard={() => setAuthenticated(true)}
         />
         <AllDialogs {...dialogProps} />
       </>
@@ -771,10 +767,9 @@ export default function App() {
             />
           )}
 
-          {page === "results" && (
-            <Results
-              key="results"
-              setPage={setPage}
+          {page === "analysis" && (
+            <AnalysisView
+              key="analysis"
               resultMetrics={resultMetrics}
               setCompareOpen={setCompareOpen}
               analysisSummary={analysisSummary}
@@ -784,29 +779,6 @@ export default function App() {
               sequenceModel={sequenceModel}
               predictionEnabled={predictionEnabled}
               predictionData={predictionData}
-            />
-          )}
-
-          {page === "prediction" && (
-            <Prediction
-              key="prediction"
-              resultMetrics={resultMetrics}
-              sequenceModel={sequenceModel}
-              setSequenceModel={setSequenceModel}
-              analysisSummary={analysisSummary}
-              predictionData={predictionData}
-              predictionEnabled={predictionEnabled}
-              datasetName={datasetName}
-              selectedSheet={selectedSheet}
-              classifier={classifier}
-            />
-          )}
-
-          {page === "interpretation" && (
-            <Interpretation
-              key="interpretation"
-              setPage={setPage}
-              setRegenOpen={setRegenOpen}
             />
           )}
 
