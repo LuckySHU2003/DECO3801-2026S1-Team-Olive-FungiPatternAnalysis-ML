@@ -30,7 +30,7 @@ export default function LoginPage({ onLogin, onOpenSignup, onOpenForgot }) {
           <Badge className="rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
             Project 19
           </Badge>
-          <h1 className="mt-5 text-4xl font-semibold tracking-tight">FBSP</h1>
+          <h1 className="mt-5 text-4xl font-semibold tracking-tight">Olive</h1>
           <p className="mt-3 max-w-xl text-slate-600">
             A research platform for fungal bioelectric signal upload, preprocessing,
             spike detection, prediction, and interpretation.
