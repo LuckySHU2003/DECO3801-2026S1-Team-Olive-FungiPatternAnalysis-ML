@@ -8,6 +8,8 @@ node_modules/
 dist/
 dist-ssr/
 backend/temp-raw-data/
+backend/temp-raw-data/internal-dev-tool/data/
+backend/temp-raw-data/internal-dev-tool/models/
 
 # logs
 *.log
@@ -35,3 +37,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 *.local
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
