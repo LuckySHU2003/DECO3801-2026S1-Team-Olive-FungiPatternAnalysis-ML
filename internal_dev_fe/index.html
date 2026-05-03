@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Internal Dev FE</title>
+  </head>
+  <body>
+    <h1>Internal Dev FE</h1>
+
+    <section>
+      <h2>Upload Dataset</h2>
+      <input id="fileInput" type="file" />
+      <button id="uploadBtn">Upload</button>
+      <pre id="uploadOutput"></pre>
+    </section>
+
+    <section>
+      <h2>Datasets</h2>
+      <button id="loadDatasetsBtn">Load Datasets</button>
+      <div id="datasets"></div>
+    </section>
+
+    <section>
+      <h2>Job</h2>
+      <p>Current job: <span id="currentJobId">None</span></p>
+      <pre id="jobOutput"></pre>
+    </section>
+
+    <section>
+      <h2>Result</h2>
+      <pre id="resultOutput"></pre>
+    </section>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
