@@ -191,7 +191,6 @@ export default function AllDialogs({
               className="bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
                 setUploadSuccessOpen(false);
-                setPage("preview");
               }}
             >
               Go to preview
@@ -350,7 +349,7 @@ export default function AllDialogs({
               className="bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
                 setRunCompleteOpen(false);
-                setPage("results");
+                setPage("analysis");
               }}
             >
               Open results
