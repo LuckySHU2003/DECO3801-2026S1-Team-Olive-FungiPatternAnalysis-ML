@@ -14,7 +14,7 @@ const EXPERIMENTS = [
   ["EXP-019-C", "Run_03", "Butterworth-512", "RF only",    "2026-03-15", "Failed"],
 ];
 
-export default function History({ setCompareOpen }) {
+export default function History({ setCompareOpen, setPage }) {
   return (
     <motion.div
       key="history"
@@ -54,6 +54,7 @@ export default function History({ setCompareOpen }) {
                   <th className="p-4 text-left">Model</th>
                   <th className="p-4 text-left">Date</th>
                   <th className="p-4 text-left">Status</th>
+                  <th className="p-4 text-left">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -68,6 +69,16 @@ export default function History({ setCompareOpen }) {
                       <Badge variant={row[5] === "Completed" ? "default" : "destructive"}>
                         {row[5]}
                       </Badge>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setPage("results")}>
+                          Result
+                        </Button>
+                        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setPage("prediction")}>
+                          Prediction
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

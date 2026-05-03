@@ -18,15 +18,8 @@ import {
  * Each entry has a unique id (used as the page key), a display label, and an icon component.
  */
 export const navItems = [
-  { id: "dashboard",      label: "Dashboard",           icon: LayoutDashboard },
-  { id: "upload",         label: "Upload Dataset",       icon: Upload },
-  { id: "preview",        label: "Dataset Preview",      icon: Database },
-  { id: "configure",      label: "Configure Analysis",   icon: Settings2 },
-  { id: "processing",     label: "Processing",           icon: Cpu },
-  { id: "results",        label: "Results",              icon: LineChart },
-  { id: "prediction",     label: "Prediction",           icon: Brain },
-  { id: "interpretation", label: "Interpretation",       icon: FileText },
-  { id: "compare",        label: "Compare Dataset",      icon: GitCompare },
+  { id: "workspace",      label: "Workspace",           icon: LayoutDashboard },
+  { id: "analysis",       label: "Analysis View",        icon: LineChart },
   { id: "models",         label: "Model Manager",        icon: FolderKanban },
   { id: "history",        label: "Experiment History",   icon: History },
 ];
