@@ -4,19 +4,12 @@ import { AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 
 import AppShell from "@/components/layout/AppShell";
-import LoginPage from "@/LoginPage";
+import Home from "@/Home";
 import AllDialogs from "@/components/dialogs/AllDialogs";
 
 // Page components
-import Dashboard from "@/components/pages/Dashboard";
-import Upload from "@/components/pages/Upload";
-import Preview from "@/components/pages/Preview";
-import Configure from "@/components/pages/Configure";
-import Processing from "@/components/pages/Processing";
-import Results from "@/components/pages/Results";
-import Prediction from "@/components/pages/Prediction";
-import Interpretation from "@/components/pages/Interpretation";
-import CompareDatasets from "@/components/pages/CompareDatasets";
+import MainWorkspace from "@/components/pages/MainWorkspace";
+import { AnalysisView } from '@/components/pages/AnalysisView';
 import Models from "@/components/pages/Models";
 import History from "@/components/pages/History";
 
@@ -108,8 +101,10 @@ function buildSignalAnalysis({
     .map((row, index) => {
       const y = row[yColumn];
       if (!isNumericValue(y)) return null;
+
       const xRaw = row[xColumn];
       const x = isNumericValue(xRaw) ? xRaw : index;
+
       return { x, y, index };
     })
     .filter(Boolean);
@@ -161,8 +156,12 @@ function buildSignalAnalysis({
     const next = points[i + 1].y;
 
     if (current > thresholdLine && current > prev && current > next) {
-      const tooClose = spikes.length && i - spikes[spikes.length - 1].index < distance;
-      if (!tooClose) spikes.push(points[i]);
+      const tooClose =
+        spikes.length && i - spikes[spikes.length - 1].index < distance;
+
+      if (!tooClose) {
+        spikes.push(points[i]);
+      }
     }
   }
 
@@ -186,7 +185,9 @@ function generatePrediction(points) {
 
   const lastX = points[points.length - 1].x;
   const lastY = points[points.length - 1].y;
-  const step = (points[points.length - 1].x - points[0].x) / Math.max(points.length - 1, 1);
+  const step =
+    (points[points.length - 1].x - points[0].x) /
+    Math.max(points.length - 1, 1);
 
   const recent = points.slice(-20).map((p) => p.y);
   const firstRecent = recent[0] ?? lastY;
@@ -196,6 +197,7 @@ function generatePrediction(points) {
   return Array.from({ length: 50 }, (_, i) => {
     const drift = trend * (i + 1);
     const seasonal = Math.sin(i / 4) * Math.max(stdDev(recent) * 0.18, 0.01);
+
     return {
       x: lastX + (i + 1) * step,
       y: lastY + drift + seasonal,
@@ -205,11 +207,14 @@ function generatePrediction(points) {
 }
 
 export default function App() {
+  // ── Auth ────────────────────────────────────────────────────────────────────
   const [authenticated, setAuthenticated] = useState(false);
 
-  const [page, setPage] = useState("dashboard");
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  const [page, setPage] = useState("workspace");
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // ── Dialog visibility flags ─────────────────────────────────────────────────
   const [signupOpen, setSignupOpen] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [uploadSuccessOpen, setUploadSuccessOpen] = useState(false);
@@ -222,9 +227,12 @@ export default function App() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [retrainOpen, setRetrainOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [viewModelOpen,     setViewModelOpen]     = useState(false);
 
+  // ── Analysis progress (0–100) ───────────────────────────────────────────────
   const [progress, setProgress] = useState(16);
 
+  // ── Editable metadata / form state ─────────────────────────────────────────
   const [datasetName, setDatasetName] = useState("");
   const [species, setSpecies] = useState("Pleurotus ostreatus");
   const [notes, setNotes] = useState(
@@ -242,6 +250,7 @@ export default function App() {
 
   const [signalData, setSignalData] = useState([]);
 
+  // ── Analysis configuration state ───────────────────────────────────────────
   const [filterType, setFilterType] = useState("butterworth");
   const [windowSize, setWindowSize] = useState("256");
   const [threshold, setThreshold] = useState("2.5");
@@ -265,7 +274,10 @@ export default function App() {
 
   const buildSignalDataFromRows = (rows, headerList) => {
     const firstNumericHeader = headerList.find((header) =>
-      rows.some((row) => typeof row[header] === "number" && !Number.isNaN(row[header]))
+      rows.some(
+        (row) =>
+          typeof row[header] === "number" && !Number.isNaN(row[header])
+      )
     );
 
     if (!firstNumericHeader) return [];
@@ -398,8 +410,8 @@ export default function App() {
         ];
       });
 
-      setUploadSuccessOpen(true);
-      setPage("preview");
+      setUploadSuccessOpen(false);
+      setPage("workspace");
     } catch (error) {
       console.error("File upload error:", error);
       setFileErrorOpen(true);
@@ -413,14 +425,16 @@ export default function App() {
     setSelectedSheet(dataset.sheet || "");
     setHeaders(dataset.headers || []);
     setTableRows(dataset.tableRows || []);
-    setSignalData(buildSignalDataFromRows(dataset.tableRows || [], dataset.headers || []));
+    setSignalData(
+      buildSignalDataFromRows(dataset.tableRows || [], dataset.headers || [])
+    );
     setHasUploadedData(true);
 
     setPredictionData([]);
     setAnalysisCompleted(false);
     setPreviewPredictionSummary(null);
 
-    setPage("preview");
+    setPage("workspace");
   };
 
   const handleSheetChange = async (sheetName) => {
@@ -470,6 +484,7 @@ export default function App() {
     normalization,
   ]);
 
+  // ── Result metrics (stable reference — values never change in prototype) ────
   const resultMetrics = useMemo(
     () => ({
       samples: analysisSummary.points.length || signalData.length || 0,
@@ -484,7 +499,10 @@ export default function App() {
       spikes: analysisSummary.spikeCount,
       frequency:
         analysisSummary.points.length > 1
-          ? `${(analysisSummary.spikeCount / Math.max(analysisSummary.points.length, 1)).toFixed(2)}`
+          ? `${(
+              analysisSummary.spikeCount /
+              Math.max(analysisSummary.points.length, 1)
+            ).toFixed(2)}`
           : "0.00",
       rmse:
         predictionData.length > 0
@@ -494,18 +512,21 @@ export default function App() {
     [analysisSummary, signalData.length, predictionData]
   );
 
-
   const startAnalysis = () => {
     const steps = [
       {
         progress: 18,
         label: "Dataset loaded",
-        log: `Loaded ${datasetName || "dataset"}${selectedSheet ? ` from sheet "${selectedSheet}"` : ""}.`,
+        log: `Loaded ${datasetName || "dataset"}${
+          selectedSheet ? ` from sheet "${selectedSheet}"` : ""
+        }.`,
       },
       {
         progress: 30,
         label: "Preprocessing",
-        log: `Applied ${filterType} preprocessing to ${analysisSummary.detectedSignalColumn || "signal"}.`,
+        log: `Applied ${filterType} preprocessing to ${
+          analysisSummary.detectedSignalColumn || "signal"
+        }.`,
       },
       {
         progress: 46,
@@ -520,7 +541,9 @@ export default function App() {
       {
         progress: 79,
         label: "Model inference",
-        log: `Ran ${classifier}${predictionEnabled ? ` with ${sequenceModel} prediction enabled` : ""}.`,
+        log: `Ran ${classifier}${
+          predictionEnabled ? ` with ${sequenceModel} prediction enabled` : ""
+        }.`,
       },
       {
         progress: 100,
@@ -535,7 +558,6 @@ export default function App() {
     setPredictionData([]);
     setAnalysisCompleted(false);
     setPreviewPredictionSummary(null);
-    setPage("processing");
 
     steps.forEach((step, idx) => {
       setTimeout(() => {
@@ -586,7 +608,7 @@ export default function App() {
           const runRmse =
             predictionEnabled && preds.length > 0
               ? Math.max(stdDev(preds.map((p) => p.y)) * 0.6, 0.01)
-              : 4.27;
+              : 0;
 
           setAnalysisRuns((prev) => [
             {
@@ -606,10 +628,11 @@ export default function App() {
           setAnalysisCompleted(true);
           setRunCompleteOpen(true);
         }
-      }, (idx + 1) * 900);
+      }, (idx + 1) * 500);
     });
   };
 
+  // ── Shared dialog props bundle (avoids repeating all props twice) ───────────
   const dialogProps = {
     signupOpen,
     setSignupOpen,
@@ -653,19 +676,19 @@ export default function App() {
     tableRows,
   };
 
+  // ── Unauthenticated view ────────────────────────────────────────────────────
   if (!authenticated) {
     return (
       <>
-        <LoginPage
-          onLogin={() => setAuthenticated(true)}
-          onOpenSignup={() => setSignupOpen(true)}
-          onOpenForgot={() => setForgotOpen(true)}
+        <Home
+          onGoToWorkspace={() => setAuthenticated(true)}
         />
         <AllDialogs {...dialogProps} />
       </>
     );
   }
 
+  // ── Authenticated view ──────────────────────────────────────────────────────
   return (
     <>
       <AppShell
@@ -675,60 +698,31 @@ export default function App() {
         setMobileOpen={setMobileOpen}
       >
         <AnimatePresence mode="wait">
-          {page === "dashboard" && (
-            <Dashboard
-              key="dashboard"
+          {page === "workspace" && (
+            <MainWorkspace
+              key="workspace"
               setPage={setPage}
               startAnalysis={startAnalysis}
               datasetName={datasetName}
-              hasUploadedData={hasUploadedData}
-              selectedSheet={selectedSheet}
-              resultMetrics={resultMetrics}
-              analysisSummary={analysisSummary}
-              analysisCompleted={analysisCompleted}
-              classifier={classifier}
-              sequenceModel={sequenceModel}
-              predictionEnabled={predictionEnabled}
-              uploadedDatasets={uploadedDatasets}
-              analysisRuns={analysisRuns}
-            />
-          )}
-
-          {page === "upload" && (
-          <Upload
-            key="upload"
-            datasetName={datasetName}
-            onFileUpload={handleFileUpload}
-            uploadedDatasets={uploadedDatasets}
-            onOpenUploadedDataset={handleOpenUploadedDataset}
-            onGoToCompare={() => setPage("compare")}
-          />
-        )}
-
-          {page === "preview" && (
-            <Preview
-              key="preview"
-              setPage={setPage}
-              setEditMetaOpen={setEditMetaOpen}
-              setDeleteDataOpen={setDeleteDataOpen}
-              datasetName={datasetName}
+              setDatasetName={setDatasetName}
               species={species}
-              signalData={signalData}
+              setSpecies={setSpecies}
+              notes={notes}
+              setNotes={setNotes}
               hasUploadedData={hasUploadedData}
+              uploadedDatasets={uploadedDatasets}
+              onFileUpload={handleFileUpload}
+              onOpenUploadedDataset={handleOpenUploadedDataset}
+              signalData={signalData}
               headers={headers}
               tableRows={tableRows}
               sheetNames={sheetNames}
               selectedSheet={selectedSheet}
               onSheetChange={handleSheetChange}
+              resultMetrics={resultMetrics}
+              analysisSummary={analysisSummary}
               analysisCompleted={analysisCompleted}
-              previewPredictionSummary={previewPredictionSummary}
-            />
-          )}
-
-          {page === "configure" && (
-            <Configure
-              key="configure"
-              setPage={setPage}
+              analysisRuns={analysisRuns}
               filterType={filterType}
               setFilterType={setFilterType}
               windowSize={windowSize}
@@ -745,36 +739,19 @@ export default function App() {
               setBaselineRemoval={setBaselineRemoval}
               normalization={normalization}
               setNormalization={setNormalization}
-              startAnalysis={startAnalysis}
+              setEditMetaOpen={setEditMetaOpen}
+              setDeleteDataOpen={setDeleteDataOpen}
+              setUploadSuccessOpen={setUploadSuccessOpen}
+              setFileErrorOpen={setFileErrorOpen}
               setParamErrorOpen={setParamErrorOpen}
               setSaveConfigOpen={setSaveConfigOpen}
-              datasetName={datasetName}
-              selectedSheet={selectedSheet}
-              headers={headers}
-              tableRows={tableRows}
-              analysisSummary={analysisSummary}
+              previewPredictionSummary={previewPredictionSummary}
             />
           )}
 
-          {page === "processing" && (
-            <Processing
-              key="processing"
-              progress={progress}
-              datasetName={datasetName}
-              selectedSheet={selectedSheet}
-              processingSteps={processingSteps}
-              processingLogs={processingLogs}
-              classifier={classifier}
-              sequenceModel={sequenceModel}
-              predictionEnabled={predictionEnabled}
-              setPage={setPage}
-            />
-          )}
-
-          {page === "results" && (
-            <Results
-              key="results"
-              setPage={setPage}
+          {page === "analysis" && (
+            <AnalysisView
+              key="analysis"
               resultMetrics={resultMetrics}
               setCompareOpen={setCompareOpen}
               analysisSummary={analysisSummary}
@@ -784,37 +761,6 @@ export default function App() {
               sequenceModel={sequenceModel}
               predictionEnabled={predictionEnabled}
               predictionData={predictionData}
-            />
-          )}
-
-          {page === "prediction" && (
-            <Prediction
-              key="prediction"
-              resultMetrics={resultMetrics}
-              sequenceModel={sequenceModel}
-              setSequenceModel={setSequenceModel}
-              analysisSummary={analysisSummary}
-              predictionData={predictionData}
-              predictionEnabled={predictionEnabled}
-              datasetName={datasetName}
-              selectedSheet={selectedSheet}
-              classifier={classifier}
-            />
-          )}
-
-          {page === "interpretation" && (
-            <Interpretation
-              key="interpretation"
-              setPage={setPage}
-              setRegenOpen={setRegenOpen}
-            />
-          )}
-
-          {page === "compare" && (
-            <CompareDatasets
-              key="compare"
-              setPage={setPage}
-              uploadedDatasets={uploadedDatasets}
             />
           )}
 
@@ -822,6 +768,7 @@ export default function App() {
             <Models
               key="models"
               setRetrainOpen={setRetrainOpen}
+              setViewModelOpen={setViewModelOpen}
             />
           )}
 
@@ -829,12 +776,15 @@ export default function App() {
             <History
               key="history"
               setCompareOpen={setCompareOpen}
+              setPage={setPage}
             />
           )}
+
         </AnimatePresence>
       </AppShell>
 
-      <AllDialogs {...dialogProps} />
+      {/* All modals rendered outside the layout so they overlay everything */}
+      <AllDialogs {...dialogProps} viewModelOpen={viewModelOpen} setViewModelOpen={setViewModelOpen} />
     </>
   );
 }

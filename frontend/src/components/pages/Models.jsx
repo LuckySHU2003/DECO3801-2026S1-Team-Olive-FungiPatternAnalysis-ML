@@ -14,7 +14,7 @@ const MODELS = [
   ["SVM_Baseline_v1",        "Classification", "Run_02", "F1 0.84",   "Archived"],
 ];
 
-export default function Models({ setRetrainOpen }) {
+export default function Models({ setRetrainOpen, setViewModelOpen }) {
   return (
     <motion.div
       key="models"
@@ -55,7 +55,7 @@ export default function Models({ setRetrainOpen }) {
                     </td>
                     <td className="p-4">
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="rounded-xl">
+                        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setViewModelOpen(true)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                         {/* Opens retrain dialog — model id could be passed if needed */}
