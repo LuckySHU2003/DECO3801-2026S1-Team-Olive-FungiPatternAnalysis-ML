@@ -1,11 +1,18 @@
-import type { JobStatus, JobType } from '../models/Job.js';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type QueueJobType = 'detect_patterns' | 'custom_exploration' | 'predict_future' | 'chat';
 
-export type JobResponseDTO = {
-  id: string;
-  type: JobType;
-  dataset_id?: string;
+export interface JobResponseDTO {
+  job_id: string;
+  type: QueueJobType;
   status: JobStatus;
-  created_at: string;
-  result_id?: string | null;
-  error?: string | null;
-};
+  dataset_id?: string;
+  result_id?: string;
+  error?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WorkerJobDTO {
+  job_id: string;
+  type: QueueJobType;
+}

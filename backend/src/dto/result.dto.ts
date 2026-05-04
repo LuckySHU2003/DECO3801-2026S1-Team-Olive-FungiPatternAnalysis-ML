@@ -1,7 +1,8 @@
-export type ResultDTO = {
-  id: string;
+export interface ResultDTO {
+  result_id: string;
   job_id: string;
-  output: Record<string, unknown>;
-  summary: string;
+  type: string;
+  output: object;
+  summary?: object;
   created_at: string;
-};
+}

@@ -1,12 +1,13 @@
-export type DatasetUploadDTO = {
+export interface DatasetResponseDTO {
+  dataset_id: string;
   name: string;
-  schema?: Record<string, unknown>;
-};
-
-export type DatasetResponseDTO = {
-  id: string;
-  name: string;
+  original_filename: string;
+  source: 'supabase';
   file_url: string;
-  schema: Record<string, unknown>;
+  storage_path: string;
+  schema: {
+    columns: string[];
+    expected_columns: ['Time', 'Voltage'];
+  };
   created_at: string;
-};
+}

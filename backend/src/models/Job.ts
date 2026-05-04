@@ -1,18 +1,12 @@
-import mongoose from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type JobType = 'predict' | 'plot' | 'chat';
+const JobSchema = new Schema({
+  type: { type: String, required: true, enum: ['detect_patterns', 'custom_exploration', 'predict_future', 'chat'] },
+  dataset_id: { type: Schema.Types.ObjectId, ref: 'Dataset' },
+  status: { type: String, required: true, enum: ['pending', 'processing', 'completed', 'failed'], default: 'pending' },
+  request_payload: { type: Schema.Types.Mixed, required: true },
+  result_id: { type: Schema.Types.ObjectId, ref: 'Result' },
+  error: String
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
-const JobSchema = new mongoose.Schema(
-  {
-    type: { type: String, enum: ['predict', 'plot', 'chat'], required: true },
-    dataset_id: { type: String },
-    status: { type: String, enum: ['pending', 'processing', 'completed', 'failed'], default: 'pending' },
-    created_at: { type: Date, default: Date.now },
-    result_id: { type: String, default: null },
-    error: { type: String, default: null }
-  },
-  { versionKey: false }
-);
-
-export const JobModel = mongoose.model('Job', JobSchema, 'jobs');
+export const JobModel = mongoose.model('Job', JobSchema);

@@ -1,57 +1,65 @@
-import { randomUUID } from 'node:crypto';
-import { DatasetModel } from '../models/Dataset.js';
-import { supabase } from '../config/supabase.js';
+import type { MultipartFile } from '@fastify/multipart';
 import { env } from '../config/env.js';
+import { supabase } from '../config/supabase.js';
+import { DatasetModel } from '../models/Dataset.js';
+import { makeStoragePath } from '../utils/ids.js';
 import type { DatasetResponseDTO } from '../dto/dataset.dto.js';
 
-function toDatasetDTO(doc: any): DatasetResponseDTO {
+function toDatasetResponse(doc: any): DatasetResponseDTO {
   return {
-    id: doc._id.toString(),
+    dataset_id: doc._id.toString(),
     name: doc.name,
+    original_filename: doc.original_filename,
+    source: 'supabase',
     file_url: doc.file_url,
-    schema: doc.schema ?? {},
+    storage_path: doc.storage_path,
+    schema: doc.schema,
     created_at: doc.created_at.toISOString()
   };
 }
 
 export class DatasetService {
-  async uploadDataset(input: { filename: string; buffer: Buffer; mimeType?: string; schema?: Record<string, unknown> }) {
-    const storagePath = `${Date.now()}-${randomUUID()}-${input.filename}`;
+  async uploadDataset(file: MultipartFile): Promise<DatasetResponseDTO> {
+    const buffer = await file.toBuffer();
+    const storagePath = makeStoragePath('datasets', file.filename);
 
     const { error } = await supabase.storage
       .from(env.SUPABASE_DATASETS_BUCKET)
-      .upload(storagePath, input.buffer, {
-        contentType: input.mimeType ?? 'application/octet-stream',
+      .upload(storagePath, buffer, {
+        contentType: file.mimetype,
         upsert: false
       });
 
-    if (error) throw new Error(`Supabase upload failed: ${error.message}`);
+    if (error) throw new Error(`Supabase dataset upload failed: ${error.message}`);
 
     const { data } = supabase.storage.from(env.SUPABASE_DATASETS_BUCKET).getPublicUrl(storagePath);
 
-    const created = await DatasetModel.create({
-      name: input.filename,
+    const doc = await DatasetModel.create({
+      name: file.filename,
+      original_filename: file.filename,
+      source: 'supabase',
       file_url: data.publicUrl,
-      schema: input.schema ?? {}
+      storage_path: storagePath,
+      bucket: env.SUPABASE_DATASETS_BUCKET,
+      schema: {
+        columns: ['Time', 'Voltage'],
+        expected_columns: ['Time', 'Voltage']
+      },
+      mime_type: file.mimetype,
+      size_bytes: buffer.length
     });
 
-    return toDatasetDTO(created);
+    return toDatasetResponse(doc);
   }
 
-  async listDatasets() {
-    const docs = await DatasetModel.find().sort({ created_at: -1 }).lean();
-    return docs.map((doc: any) => ({
-      id: doc._id.toString(),
-      name: doc.name,
-      file_url: doc.file_url,
-      schema: doc.schema ?? {},
-      created_at: doc.created_at.toISOString()
-    }));
+  async listDatasets(): Promise<DatasetResponseDTO[]> {
+    const docs = await DatasetModel.find().sort({ created_at: -1 });
+    return docs.map(toDatasetResponse);
   }
 
-  async getDataset(id: string) {
+  async getDatasetById(id: string): Promise<DatasetResponseDTO> {
     const doc = await DatasetModel.findById(id);
-    if (!doc) return null;
-    return toDatasetDTO(doc);
+    if (!doc) throw new Error('Dataset not found');
+    return toDatasetResponse(doc);
   }
 }

@@ -1,82 +1,57 @@
 import { Worker } from 'bullmq';
-import { redisConnection } from '../queue/connection.js';
 import { connectMongo } from '../config/db.js';
-import { env } from '../config/env.js';
+import { redisConnection } from '../queue/connection.js';
+import { JobModel } from '../models/Job.js';
 import { JobService } from '../services/JobService.js';
 import { ResultService } from '../services/ResultService.js';
-import type { MLWorkerPredictPayloadDTO } from '../dto/predict.dto.js';
-import { logger } from '../utils/logger.js';
+import { detectPatternsProcessor } from './processors/detectPatterns.processor.js';
+import { customExplorationProcessor } from './processors/customExploration.processor.js';
+import { predictFutureProcessor } from './processors/predictFuture.processor.js';
 
-const jobService = new JobService();
-const resultService = new ResultService();
+async function processWorkspaceJob(data: { job_id: string; type: string }) {
+  const jobService = new JobService();
+  const resultService = new ResultService();
 
-async function callMlService(payload: MLWorkerPredictPayloadDTO) {
-  if (!env.ML_SERVICE_URL) {
-    return {
-      prediction: [0.12, 0.18, 0.21],
-      confidence: 0.8,
-      source: 'node-worker-mock'
-    };
-  }
+  await jobService.updateStatus(data.job_id, 'processing');
+  const jobDoc = await JobModel.findById(data.job_id);
+  if (!jobDoc) throw new Error('Job not found');
 
-  const response = await fetch(`${env.ML_SERVICE_URL}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      dataset_url: payload.dataset_url,
-      model_url: payload.model_url,
-      parameters: payload.parameters ?? {}
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`ML service failed with status ${response.status}`);
-  }
-
-  return response.json() as Promise<Record<string, unknown>>;
-}
-
-async function processPredict(payload: MLWorkerPredictPayloadDTO) {
-  await jobService.updateJobStatus(payload.job_id, 'processing');
-  logger.info({ job_id: payload.job_id }, 'Processing prediction job');
-
-  const mlOutput = await callMlService(payload);
+  let output: object;
+  if (data.type === 'detect_patterns') output = await detectPatternsProcessor(data.job_id, jobDoc.request_payload);
+  else if (data.type === 'custom_exploration') output = await customExplorationProcessor(data.job_id, jobDoc.request_payload);
+  else if (data.type === 'predict_future') output = await predictFutureProcessor(data.job_id, jobDoc.request_payload);
+  else throw new Error(`Unsupported job type: ${data.type}`);
 
   const result = await resultService.createResult({
-    job_id: payload.job_id,
-    output: mlOutput,
-    summary: 'Mock prediction completed. Replace this with real model inference output.'
+    job_id: data.job_id,
+    type: data.type,
+    output,
+    summary: (output as any).summary
   });
 
-  await jobService.updateJobStatus(payload.job_id, 'completed', { result_id: result.id });
-  logger.info({ job_id: payload.job_id, result_id: result.id }, 'Prediction job completed');
+  await jobService.updateStatus(data.job_id, 'completed', { result_id: result.result_id });
+  return result;
 }
 
 async function main() {
   await connectMongo();
 
-  const worker = new Worker(
-    'ai-jobs',
-    async (job) => {
-      if (job.name === 'predict') {
-        return processPredict(job.data as MLWorkerPredictPayloadDTO);
-      }
-      throw new Error(`Unsupported job type: ${job.name}`);
-    },
-    { connection: redisConnection }
-  );
-
-  worker.on('failed', async (job, error) => {
-    logger.error({ job_id: job?.data?.job_id, error }, 'Job failed');
-    if (job?.data?.job_id) {
-      await jobService.updateJobStatus(job.data.job_id, 'failed', { error: error.message });
-    }
+  const worker = new Worker('workspace-jobs', async (job) => processWorkspaceJob(job.data), {
+    connection: redisConnection,
+    concurrency: 2
   });
 
-  logger.info('Worker started');
+  worker.on('completed', (job) => console.log(`Worker completed ${job.name}:${job.id}`));
+  worker.on('failed', async (job, error) => {
+    console.error(`Worker failed ${job?.name}:${job?.id}`, error);
+    const appJobId = job?.data?.job_id;
+    if (appJobId) await new JobService().updateStatus(appJobId, 'failed', { error: error.message });
+  });
+
+  console.log('Workspace worker started');
 }
 
 main().catch((error) => {
-  logger.error(error, 'Worker failed to start');
+  console.error(error);
   process.exit(1);
 });

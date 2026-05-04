@@ -3,17 +3,19 @@ import { z } from 'zod';
 
 dotenv.config();
 
-const EnvSchema = z.object({
-  PORT: z.coerce.number().default(4000),
+const envSchema = z.object({
+  PORT: z.coerce.number().default(5000),
   NODE_ENV: z.string().default('development'),
+  CORS_ORIGIN: z.string().default('*'),
   MONGODB_URI: z.string().min(1),
   REDIS_URL: z.string().min(1),
-  SUPABASE_URL: z.string().min(1),
+  SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_DATASETS_BUCKET: z.string().default('datasets'),
   SUPABASE_MODELS_BUCKET: z.string().default('models'),
-  ML_SERVICE_URL: z.string().optional(),
-  CORS_ORIGIN: z.string().default('*')
+  ML_SERVICE_URL: z.string().url().default('http://localhost:8001'),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-4o-mini')
 });
 
-export const env = EnvSchema.parse(process.env);
+export const env = envSchema.parse(process.env);

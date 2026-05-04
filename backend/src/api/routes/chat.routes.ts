@@ -1,18 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
+import { chatRequestSchema } from '../../dto/chat.dto.js';
 import { ChatService } from '../../services/ChatService.js';
 
-const ChatBodySchema = z.object({
-  dataset_id: z.string().optional(),
-  message: z.string().min(1)
-});
-
 export async function chatRoutes(app: FastifyInstance) {
-  const chatService = new ChatService();
+  const service = new ChatService();
 
-  app.post('/chat', async (request, reply) => {
-    const body = ChatBodySchema.parse(request.body);
-    const response = await chatService.reply(body);
-    return reply.send(response);
+  app.post('/chat', async (request) => {
+    const dto = chatRequestSchema.parse(request.body);
+    return service.createChatResponse(dto);
   });
 }
