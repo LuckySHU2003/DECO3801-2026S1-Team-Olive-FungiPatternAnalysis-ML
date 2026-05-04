@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { JobService } from '../../src/services/JobService.js';
-import { JobModel } from '../../src/models/Job.js';
+import { JobService } from '../../../src/services/JobService.js';
+import { JobModel } from '../../../src/models/Job.js';
 
-vi.mock('../../src/models/Job.js', () => ({
+vi.mock('../../../src/models/Job.js', () => ({
   JobModel: {
     create: vi.fn(),
     findById: vi.fn(),

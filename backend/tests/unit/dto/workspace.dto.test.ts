@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectPatternsRequestSchema, predictFutureRequestSchema } from '../../src/dto/workspace.dto.js';
+import { detectPatternsRequestSchema, predictFutureRequestSchema } from '../../../src/dto/workspace.dto.js';
 
 describe('workspace DTO validation', () => {
   it('validates detect patterns payload', () => {
