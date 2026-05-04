@@ -7,7 +7,7 @@ const DatasetSchema = new Schema({
   file_url: { type: String, required: true },
   storage_path: { type: String, required: true },
   bucket: { type: String, required: true },
-  schema: {
+  dataset_schema: {
     columns: [{ type: String }],
     expected_columns: [{ type: String }]
   },

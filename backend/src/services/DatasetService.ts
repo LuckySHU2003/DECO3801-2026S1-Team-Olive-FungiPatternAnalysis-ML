@@ -41,7 +41,7 @@ export class DatasetService {
       file_url: data.publicUrl,
       storage_path: storagePath,
       bucket: env.SUPABASE_DATASETS_BUCKET,
-      schema: {
+      dataset_schema: {
         columns: ['Time', 'Voltage'],
         expected_columns: ['Time', 'Voltage']
       },
