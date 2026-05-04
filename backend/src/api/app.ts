@@ -2,7 +2,6 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { env } from '../config/env.js';
-import { logger } from '../utils/logger.js';
 import { datasetRoutes } from './routes/dataset.routes.js';
 import { predictRoutes } from './routes/predict.routes.js';
 import { jobRoutes } from './routes/job.routes.js';
@@ -25,8 +24,9 @@ export async function buildApp() {
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);
-    const statusCode = error.statusCode ?? 500;
-    reply.code(statusCode).send({ error: error.message ?? 'Internal server error' });
+    const err = error as Error & { statusCode?: number };
+    const statusCode = err.statusCode ?? 500;
+    reply.code(statusCode).send({ error: err.message ?? 'Internal server error' });
   });
 
   return app;
