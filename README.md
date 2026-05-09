@@ -85,6 +85,7 @@ backend/    → React (Node.js) + Express API
 cd frontend
 npm install
 npm install xlsx lucide-react framer-motion clsx tailwind-merge
+npm install three @react-three/fiber@8.17.10 @react-three/drei@9.122.0
 ```
 
 #### Backend
