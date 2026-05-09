@@ -8,10 +8,13 @@ import Home from "@/Home";
 import AllDialogs from "@/components/dialogs/AllDialogs";
 
 // Page components
+import GetStarted from "@/components/pages/GetStarted";
 import MainWorkspace from "@/components/pages/MainWorkspace";
 import { AnalysisView } from '@/components/pages/AnalysisView';
 import Models from "@/components/pages/Models";
 import History from "@/components/pages/History";
+import FungiGarden from "@/components/pages/FungiGarden";
+
 
 function isNumericValue(value) {
   return typeof value === "number" && !Number.isNaN(value);
@@ -676,17 +679,10 @@ export default function App() {
     tableRows,
   };
 
-  // ── Unauthenticated view ────────────────────────────────────────────────────
-  if (!authenticated) {
-    return (
-      <>
-        <Home
-          onGoToWorkspace={() => setAuthenticated(true)}
-        />
-        <AllDialogs {...dialogProps} />
-      </>
-    );
+  if (!hasEntered) {
+    return <GetStarted onEnter={() => setHasEntered(true)} />;
   }
+
 
   // ── Authenticated view ──────────────────────────────────────────────────────
   return (
@@ -780,6 +776,9 @@ export default function App() {
             />
           )}
 
+          {page === "garden" && (
+            <FungiGarden key="garden" setPage={setPage} />
+          )}
         </AnimatePresence>
       </AppShell>
 
