@@ -211,8 +211,7 @@ function generatePrediction(points) {
 
 export default function App() {
   // ── Auth ────────────────────────────────────────────────────────────────────
-  const [hasEntered, setHasEntered] = useState(false);
-
+  const [authenticated, setAuthenticated] = useState(false);
   // ── Navigation ──────────────────────────────────────────────────────────────
   const [page, setPage] = useState("workspace");
   const [mobileOpen, setMobileOpen] = useState(false);
