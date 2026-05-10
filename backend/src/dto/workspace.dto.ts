@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 export const preprocessingModeSchema = z.enum(['raw', 'detrended']);
 export const missingValueStrategySchema = z.enum(['drop', 'interpolate', 'forward_fill', 'zero_fill']).default('interpolate');
-export const modelTypeSchema = z.enum(['pkl', 'pt', 'onnx', 'joblib', 'other']);
-export const modelSelectionSchema = z.enum(['rf', 'cnn', 'lstm']);
+export const modelTypeSchema = z.enum(['pkl', 'joblib', 'pt', 'pth', 'onnx', 'other']);
+export const modelSelectionSchema = z.string().min(1);
 
 const datasetSchema = z.object({
   dataset_id: z.string().min(1),
@@ -24,7 +24,10 @@ const modelSchema = z.object({
   name: z.string().min(1),
   selection: modelSelectionSchema.optional(),
   type: modelTypeSchema,
-  version: z.string().optional()
+  version: z.string().optional(),
+  file_url: z.string().url().optional(),
+  storage_path: z.string().optional(),
+  metadata: z.record(z.any()).optional()
 });
 
 export const detectPatternsRequestSchema = z.object({
@@ -35,7 +38,7 @@ export const detectPatternsRequestSchema = z.object({
     pattern_types: z.array(z.string()).default([]),
     threshold: z.number(),
     window_size: z.number().int().positive(),
-    min_interval: z.number().int().nonnegative()
+    min_interval: z.number().int().nonnegative().default(0)
   }),
   model: modelSchema
 });
@@ -47,10 +50,10 @@ export const customExplorationRequestSchema = z.object({
   analysis_config: z.object({
     threshold: z.number(),
     window_size: z.number().int().positive(),
-    time_range: z.object({ start: z.number(), end: z.number() }),
-    model_selection: modelSelectionSchema,
+    time_range: z.object({ start: z.number(), end: z.number() }).optional(),
     compare_with_previous_run: z.boolean().default(false)
   }),
+  model: modelSchema,
   previous_run_id: z.string().nullable().optional()
 });
 
@@ -59,8 +62,7 @@ export const predictFutureRequestSchema = z.object({
   dataset: datasetSchema,
   preprocessing: preprocessingSchema,
   prediction_config: z.object({
-    prediction_window: z.number().int().positive(),
-    model_selection: modelSelectionSchema
+    prediction_window: z.number().int().positive()
   }),
   model: modelSchema
 });
@@ -114,7 +116,6 @@ export interface CustomExplorationResultDTO {
   config_used: {
     threshold: number;
     window_size: number;
-    model_selection: string;
     preprocessing_mode: string;
     normalize: boolean;
     missing_value_strategy: string;
@@ -138,7 +139,6 @@ export interface PredictFutureResultDTO {
   job: 'predict_future';
   status: string;
   confidence_score: number;
-  model_used: string;
   prediction_window: number;
   predicted_voltage_window: PredictedVoltagePointDTO[];
   summary: {

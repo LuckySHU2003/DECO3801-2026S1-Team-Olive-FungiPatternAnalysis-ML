@@ -15,7 +15,9 @@ const envSchema = z.object({
   SUPABASE_MODELS_BUCKET: z.string().default('models'),
   ML_SERVICE_URL: z.string().url().default('http://localhost:8001'),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default('gpt-4o-mini')
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  SUPABASE_SIGNED_URL_EXPIRES_SECONDS: z.coerce.number().int().positive().default(3600),
+  ML_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120000)
 });
 
 export const env = envSchema.parse(process.env);

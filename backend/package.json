@@ -1,5 +1,5 @@
 {
-  "name": "mycosignal-workspace-backend",
+  "name": "workspace-backend",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "worker:dev": "tsx watch src/workers/job.worker.ts",
     "worker:start": "node dist/workers/job.worker.js",
+    "start:all": "concurrently \"node dist/server.js\" \"node dist/workers/job.worker.js\"",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -21,7 +22,8 @@
     "ioredis": "^5.4.2",
     "mongoose": "^8.10.1",
     "openai": "^4.85.1",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "concurrently": "^9.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
