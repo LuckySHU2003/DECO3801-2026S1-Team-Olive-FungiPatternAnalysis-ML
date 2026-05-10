@@ -1,4 +1,4 @@
-# Backend README v1.0
+# Backend README v2.0
 
 This backend supports the Workspace workflow for uploading Time/Voltage datasets, creating asynchronous analysis jobs, processing jobs through a worker, calling the ML service, and returning results to the frontend.
 
@@ -10,7 +10,7 @@ The backend is designed around three Workspace functions:
 
 Correlation is intentionally excluded.
 
-## ML Features are currently mocked up but demonstrated desired payload. Work in progress for ML side of backend.
+## For ML Features, see /ml-service README.md
 
 ## What this backend does
 
@@ -52,31 +52,28 @@ Create `backend/.env`:
 
 ```env
 PORT=5000
+CLIENT_URL=http://localhost:5173
 CORS_ORIGIN=http://localhost:5173
 
+NODE_ENV=development
+
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database-name>
+REDIS_URL=redis://default:<password@<hostname>:<port>
 
-REDIS_URL=redis://default:<password>@<host>:<port>
-
-SUPABASE_URL=https://<project-id>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service-role-secret-key>
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_DATASETS_BUCKET=datasets
 SUPABASE_MODELS_BUCKET=models
+SUPABASE_SIGNED_URL_EXPIRES_SECONDS=3600
 
 ML_SERVICE_URL=http://localhost:8001
+ML_REQUEST_TIMEOUT_MS=120000
 
-OPENAI_API_KEY=<optional-for-chat>
+OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-For production, change:
-
-```env
-CORS_ORIGIN=https://your-frontend.vercel.app
-ML_SERVICE_URL=https://your-ml-service.onrender.com
-```
-
-Do not expose `SUPABASE_SERVICE_ROLE_KEY` in frontend code.
+For production, change the sameple connection to your service url call.
 
 ## Supabase setup
 
@@ -88,7 +85,7 @@ models
 ```
 
 Use `datasets` for uploaded CSV/XLSX files.
-Use `models` for model binaries such as `.pkl`, `.pt`, `.onnx`, or other Python model files.
+Use `models` for model binaries such as `.pkl`, `.pt`, or other Python model files.
 
 The backend stores only the file URL/path in MongoDB. It does not store file contents in MongoDB.
 

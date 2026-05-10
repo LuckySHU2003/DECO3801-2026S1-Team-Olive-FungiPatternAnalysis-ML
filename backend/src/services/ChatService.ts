@@ -18,6 +18,7 @@ export class ChatService {
     const result = dto.result_id ? await ResultModel.findById(dto.result_id) : null;
 
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+    // TO DO: Need to edit prompt and check if it works
     const completion = await client.chat.completions.create({
       model: env.OPENAI_MODEL,
       messages: [

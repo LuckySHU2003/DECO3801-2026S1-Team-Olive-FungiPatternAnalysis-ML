@@ -9,17 +9,25 @@ const endpointMap: Record<WorkspaceJobType, string> = {
 
 export class MlClient {
   async run(type: WorkspaceJobType, payload: object) {
-    const response = await fetch(`${env.ML_SERVICE_URL}${endpointMap[type]}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), env.ML_REQUEST_TIMEOUT_MS);
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`ML service failed: ${response.status} ${text}`);
+    try {
+      const response = await fetch(`${env.ML_SERVICE_URL}${endpointMap[type]}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`ML service failed: ${response.status} ${text}`);
+      }
+
+      return response.json() as Promise<object>;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    return response.json() as Promise<object>;
   }
 }

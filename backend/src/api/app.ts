@@ -8,6 +8,7 @@ import { workspaceRoutes } from './routes/workspace.routes.js';
 import { jobRoutes } from './routes/job.routes.js';
 import { resultRoutes } from './routes/result.routes.js';
 import { chatRoutes } from './routes/chat.routes.js';
+import { modelRoutes } from './routes/model.routes.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -22,7 +23,8 @@ export async function buildApp() {
   await app.register(jobRoutes);
   await app.register(resultRoutes);
   await app.register(chatRoutes);
-
+  await app.register(modelRoutes);
+  
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);
 
