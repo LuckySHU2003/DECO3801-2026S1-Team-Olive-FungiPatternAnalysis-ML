@@ -9,7 +9,7 @@ import AllDialogs from "@/components/dialogs/AllDialogs";
 // Page components
 import GetStarted from "@/components/pages/GetStarted";
 import MainWorkspace from "@/components/pages/MainWorkspace";
-import AnalysisView from '@/components/pages/AnalysisView';
+import { AnalysisView } from '@/components/pages/AnalysisView';
 import Models from "@/components/pages/Models";
 import History from "@/components/pages/History";
 import FungiGarden from "@/components/pages/FungiGarden";
