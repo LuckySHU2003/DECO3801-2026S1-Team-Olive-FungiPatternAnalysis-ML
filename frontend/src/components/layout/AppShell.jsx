@@ -19,11 +19,11 @@ import { navItems } from "@/constants/data";
 export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, children }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="flex min-h-screen">
+      <div className="flex">
 
         {/* ── Sidebar ─────────────────────────────────────────────── */}
         <aside
-          className={`fixed inset-y-0 left-0 z-40 w-72 border-r bg-white p-4 transition-transform lg:static lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-40 w-72 border-r bg-white p-4 transition-transform lg:translate-x-0 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -33,8 +33,8 @@ export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, chi
               <Brain className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-semibold">MycoSignal</div>
-              <div className="text-xs text-slate-500">Fungal Bioelectric Signal Processor</div>
+              <div className="text-lg font-semibold">Olive</div>
+                <div className="text-xs text-slate-500">Fungal Bioelectric Signal Processor</div>
             </div>
           </div>
 
@@ -76,10 +76,10 @@ export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, chi
         </aside>
 
         {/* ── Main content column ──────────────────────────────────── */}
-        <div className="flex-1 lg:ml-0">
+        <div className="flex-1 lg:ml-72">
 
           {/* Sticky top navigation bar */}
-          <header className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur">
+          <header className="z-30 border-b bg-white/95 backdrop-blur">
             <div className="flex items-center justify-between gap-4 px-4 py-4 lg:px-8">
               <div className="flex items-center gap-3">
                 {/* Mobile hamburger button — hidden on desktop */}
@@ -105,16 +105,6 @@ export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, chi
                 <Button variant="outline" size="icon" className="rounded-2xl">
                   <Bell className="h-4 w-4" />
                 </Button>
-                {/* User profile chip */}
-                <div className="flex items-center gap-3 rounded-2xl border px-3 py-2">
-                  <div className="rounded-full bg-slate-100 p-2">
-                    <User className="h-4 w-4" />
-                  </div>
-                  <div className="hidden sm:block">
-                    <div className="text-sm font-medium">Allison</div>
-                    <div className="text-xs text-slate-500">Research Analyst</div>
-                  </div>
-                </div>
               </div>
             </div>
           </header>

@@ -39,6 +39,12 @@ export default function AllDialogs({
   setRetrainOpen,
   compareOpen,
   setCompareOpen,
+  modelCompareOpen,
+  setModelCompareOpen,
+  viewModelOpen,
+  setViewModelOpen,
+  viewingModel,
+  selectedModels,
 
   // shared app state
   datasetName,
@@ -451,6 +457,262 @@ export default function AllDialogs({
           </div>
           <DialogFooter>
             <Button onClick={() => setCompareOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Model Detail Dialog */}
+      <Dialog open={viewModelOpen} onOpenChange={setViewModelOpen}>
+        <DialogContent className="rounded-3xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Model Detail</DialogTitle>
+          </DialogHeader>
+          {viewingModel && (
+            <div className="rounded-2xl bg-slate-50 p-4 space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Model:</span>
+                <span className="font-medium text-slate-900">{viewingModel.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Type:</span>
+                <span className="text-slate-700">{viewingModel.type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Trained dataset:</span>
+                <span className="text-slate-700">{viewingModel.dataset}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Metric:</span>
+                <span className="text-slate-700">{viewingModel.metric}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status:</span>
+                <span className={`px-2 py-1 rounded-full text-xs ${
+                  viewingModel.status === "Active" ? 'bg-emerald-100 text-emerald-700' :
+                  viewingModel.status === "Saved" ? 'bg-blue-100 text-blue-700' :
+                  'bg-slate-100 text-slate-600'
+                }`}>
+                  {viewingModel.status}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Config:</span>
+                <span className="text-slate-700">Butterworth filter, window 256</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Last trained:</span>
+                <span className="text-slate-700">2026-03-19</span>
+              </div>
+              {viewingModel.f1 !== null && (
+                <div className="border-t border-slate-200 pt-3 mt-3 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">F1 score:</span>
+                    <span className="font-medium text-slate-700">{viewingModel.f1}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Spike count:</span>
+                    <span className="font-medium text-slate-700">{viewingModel.spikeCount}</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">RMSE:</span>
+                <span className="font-medium text-slate-700">{viewingModel.rmse}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setViewModelOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Model Compare Dialog */}
+      <Dialog open={modelCompareOpen} onOpenChange={setModelCompareOpen}>
+        <DialogContent className="max-w-5xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Compare Models</DialogTitle>
+            <DialogDescription>
+              Side-by-side comparison of selected models performance.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedModels && selectedModels.length === 2 && (
+            <div className="grid gap-4 py-3 md:grid-cols-2">
+              {/* Determine best model based on type */}
+              {(() => {
+                const modelA = selectedModels[0];
+                const modelB = selectedModels[1];
+                
+                let bestModel = null;
+                if (modelA.type === "Classification" && modelB.type === "Classification") {
+                  bestModel = modelA.f1 > modelB.f1 ? modelA : modelB;
+                } else if (modelA.type === "Prediction" && modelB.type === "Prediction") {
+                  bestModel = modelA.rmse < modelB.rmse ? modelA : modelB;
+                } else {
+                  bestModel = modelA.type === "Classification" ? modelA : modelB;
+                }
+
+                const isModelABest = bestModel.id === modelA.id;
+                const isModelBBest = bestModel.id === modelB.id;
+
+                const f1Diff = modelA.f1 && modelB.f1 ? Math.abs(modelA.f1 - modelB.f1).toFixed(2) : null;
+                const spikeDiff = modelA.spikeCount && modelB.spikeCount ? Math.abs(modelA.spikeCount - modelB.spikeCount) : null;
+                const rmseDiff = modelA.rmse && modelB.rmse ? Math.abs(modelA.rmse - modelB.rmse).toFixed(2) : null;
+
+                return (
+                  <>
+                    {/* Model A */}
+                    <Card className={`rounded-2xl transition-all ${
+                      isModelABest 
+                        ? 'bg-emerald-50 border-emerald-200 shadow-lg shadow-emerald-100' 
+                        : 'bg-slate-50 border-slate-200 opacity-70'
+                    }`}>
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className="text-2xl font-bold text-emerald-600">A</span>
+                          <div>
+                            <h3 className={`font-semibold text-lg ${isModelABest ? 'text-emerald-800' : 'text-slate-600'}`}>
+                              {modelA.name}
+                            </h3>
+                            {isModelABest && (
+                              <span className="text-xs text-emerald-600 font-medium">Best Model</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Type:</span>
+                            <span className={isModelABest ? 'text-emerald-700' : 'text-slate-700'}>
+                              {modelA.type}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Dataset:</span>
+                            <span className={isModelABest ? 'text-emerald-700' : 'text-slate-700'}>
+                              {modelA.dataset}
+                            </span>
+                          </div>
+                          <div className="border-t border-slate-200 pt-3 mt-3">
+                            {modelA.f1 !== null && (
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-slate-500">F1 score:</span>
+                                <span className={`font-medium ${isModelABest ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                  {modelA.f1}
+                                </span>
+                              </div>
+                            )}
+                            {modelA.spikeCount !== null && (
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-slate-500">Spike count:</span>
+                                <span className={`font-medium ${isModelABest ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                  {modelA.spikeCount}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">RMSE:</span>
+                              <span className={`font-medium ${isModelABest ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                {modelA.rmse}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Model B */}
+                    <Card className={`rounded-2xl transition-all ${
+                      isModelBBest 
+                        ? 'bg-emerald-50 border-emerald-200 shadow-lg shadow-emerald-100' 
+                        : 'bg-slate-50 border-slate-200 opacity-70'
+                    }`}>
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className="text-2xl font-bold text-emerald-600">B</span>
+                          <div>
+                            <h3 className={`font-semibold text-lg ${isModelBBest ? 'text-emerald-800' : 'text-slate-600'}`}>
+                              {modelB.name}
+                            </h3>
+                            {isModelBBest && (
+                              <span className="text-xs text-emerald-600 font-medium">Best Model</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Type:</span>
+                            <span className={isModelBBest ? 'text-emerald-700' : 'text-slate-700'}>
+                              {modelB.type}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Dataset:</span>
+                            <span className={isModelBBest ? 'text-emerald-700' : 'text-slate-700'}>
+                              {modelB.dataset}
+                            </span>
+                          </div>
+                          <div className="border-t border-slate-200 pt-3 mt-3">
+                            {modelB.f1 !== null && (
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-slate-500">F1 score:</span>
+                                <span className={`font-medium ${isModelBBest ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                  {modelB.f1}
+                                </span>
+                              </div>
+                            )}
+                            {modelB.spikeCount !== null && (
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-slate-500">Spike count:</span>
+                                <span className={`font-medium ${isModelBBest ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                  {modelB.spikeCount}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">RMSE:</span>
+                              <span className={`font-medium ${isModelBBest ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                {modelB.rmse}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {selectedModels && selectedModels.length === 2 && (
+            <div className="mt-4 p-4 rounded-2xl bg-slate-50">
+              <p className="text-sm text-slate-700">
+                <strong>Comparison Summary:</strong>{' '}
+                {(() => {
+                  const modelA = selectedModels[0];
+                  const modelB = selectedModels[1];
+                  
+                  if (modelA.type === "Classification" && modelB.type === "Classification") {
+                    const betterModel = modelA.f1 > modelB.f1 ? modelA : modelB;
+                    const worseModel = modelA.f1 <= modelB.f1 ? modelA : modelB;
+                    const diff = Math.abs(modelA.f1 - modelB.f1).toFixed(2);
+                    return `${betterModel.name} outperforms ${worseModel.name} in classification accuracy (+${diff})`;
+                  } else if (modelA.type === "Prediction" && modelB.type === "Prediction") {
+                    const betterModel = modelA.rmse < modelB.rmse ? modelA : modelB;
+                    const worseModel = modelA.rmse >= modelB.rmse ? modelA : modelB;
+                    const diff = Math.abs(modelA.rmse - modelB.rmse).toFixed(2);
+                    return `${betterModel.name} has better prediction accuracy with lower RMSE (-${diff})`;
+                  } else {
+                    return "Models have different types. Classification models are compared by F1 score, Prediction models by RMSE.";
+                  }
+                })()}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setModelCompareOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

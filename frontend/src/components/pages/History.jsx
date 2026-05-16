@@ -66,19 +66,17 @@ export default function History({ setCompareOpen, setPage }) {
                     <td className="p-4">{row[3]}</td>
                     <td className="p-4">{row[4]}</td>
                     <td className="p-4">
-                      <Badge variant={row[5] === "Completed" ? "default" : "destructive"}>
+                      <Badge className={`${
+                        row[5] === "Completed" ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' :
+                        'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}>
                         {row[5]}
                       </Badge>
                     </td>
                     <td className="p-4">
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setPage("results")}>
-                          Result
-                        </Button>
-                        <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setPage("prediction")}>
-                          Prediction
-                        </Button>
-                      </div>
+                      <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setPage("analysis")}>
+                        View Analysis
+                      </Button>
                     </td>
                   </tr>
                 ))}
