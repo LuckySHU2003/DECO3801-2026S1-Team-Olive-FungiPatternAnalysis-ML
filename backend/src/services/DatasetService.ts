@@ -77,9 +77,7 @@ export class DatasetService {
 
     const bucket = dataset.bucket || 'datasets';
 
-    const objectPath = dataset.storage_path?.startsWith(`${bucket}/`)
-      ? dataset.storage_path.replace(`${bucket}/`, '')
-      : dataset.storage_path;
+    const objectPath = dataset.storage_path;
 
     if (!objectPath) {
       throw new Error('Dataset storage_path is missing');
