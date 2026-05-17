@@ -571,6 +571,157 @@ export default function MainWorkspace({
   const [xRange, setXRange] = useState([0, 0]);
   const [yRange, setYRange] = useState([0, 0]);
 
+  const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+  const [dashboardDatasets, setDashboardDatasets] = useState([]);
+  const [dashboardModels, setDashboardModels] = useState([]);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
+  const [selectedDashboardRecord, setSelectedDashboardRecord] = useState(null);
+  const [selectedDashboardRecordLoading, setSelectedDashboardRecordLoading] = useState(false);
+  const [selectedDashboardRecordError, setSelectedDashboardRecordError] = useState("");
+
+  const normalizeApiList = (payload, key) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.[key])) return payload[key];
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.items)) return payload.items;
+    return [];
+  };
+
+  const getDatasetId = (dataset) => dataset?.dataset_id || dataset?.id || dataset?._id;
+
+  const getModelId = (model) => model?.model_id || model?.id || model?._id;
+
+  const getDatasetDisplayName = (dataset) => {
+    return dataset?.name || dataset?.original_filename || dataset?.filename || "Unnamed dataset";
+  };
+
+  const getModelDisplayName = (model) => {
+    return model?.name || model?.model_name || model?.type || "Unnamed model";
+  };
+
+  const getRecordTimestamp = (record) => {
+    return record?.created_at || record?.createdAt || record?.uploadedAt || record?.updatedAt || null;
+  };
+
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchDashboardData = async () => {
+      if (!API_URL) {
+        setDashboardError("Missing VITE_API_URL. Add your Render backend URL to the frontend .env file.");
+        return;
+      }
+
+      setDashboardLoading(true);
+      setDashboardError("");
+
+      try {
+        const [datasetsResponse, modelsResponse] = await Promise.all([
+          fetch(`${API_URL}/datasets`),
+          fetch(`${API_URL}/models`),
+        ]);
+
+        if (!datasetsResponse.ok) {
+          throw new Error(`Failed to load datasets (${datasetsResponse.status})`);
+        }
+
+        if (!modelsResponse.ok) {
+          throw new Error(`Failed to load models (${modelsResponse.status})`);
+        }
+
+        const [datasetsPayload, modelsPayload] = await Promise.all([
+          datasetsResponse.json(),
+          modelsResponse.json(),
+        ]);
+
+        if (ignore) return;
+
+        setDashboardDatasets(normalizeApiList(datasetsPayload, "datasets"));
+        setDashboardModels(normalizeApiList(modelsPayload, "models"));
+      } catch (error) {
+        if (!ignore) {
+          setDashboardError(error?.message || "Failed to load dashboard data.");
+        }
+      } finally {
+        if (!ignore) {
+          setDashboardLoading(false);
+        }
+      }
+    };
+
+    fetchDashboardData();
+
+    return () => {
+      ignore = true;
+    };
+  }, [API_URL]);
+
+  const latestDataset = useMemo(() => {
+    return [...dashboardDatasets].sort((a, b) => {
+      return new Date(getRecordTimestamp(b) || 0) - new Date(getRecordTimestamp(a) || 0);
+    })[0];
+  }, [dashboardDatasets]);
+
+  const recentDashboardItems = useMemo(() => {
+    const datasetItems = dashboardDatasets.map((dataset) => ({
+      id: getDatasetId(dataset),
+      type: "dataset",
+      label: "Dataset uploaded",
+      name: getDatasetDisplayName(dataset),
+      timestamp: getRecordTimestamp(dataset),
+    }));
+
+    const modelItems = dashboardModels.map((model) => ({
+      id: getModelId(model),
+      type: "model",
+      label: "Model available",
+      name: getModelDisplayName(model),
+      timestamp: getRecordTimestamp(model),
+    }));
+
+    return [...datasetItems, ...modelItems]
+      .filter((item) => item.id || item.name)
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+      .slice(0, 6);
+  }, [dashboardDatasets, dashboardModels]);
+
+  const handleOpenDashboardRecord = async (item) => {
+    if (!API_URL || !item?.id) return;
+
+    const resource = item.type === "dataset" ? "datasets" : "models";
+
+    setSelectedDashboardRecordLoading(true);
+    setSelectedDashboardRecordError("");
+
+    try {
+      const response = await fetch(`${API_URL}/${resource}/${item.id}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load ${item.type} metadata (${response.status})`);
+      }
+
+      const payload = await response.json();
+      setSelectedDashboardRecord({ type: item.type, payload });
+    } catch (error) {
+      setSelectedDashboardRecordError(error?.message || `Failed to load ${item.type} metadata.`);
+    } finally {
+      setSelectedDashboardRecordLoading(false);
+    }
+  };
+
+  const selectedPayload = selectedDashboardRecord?.payload || {};
+  const selectedRecordRows = selectedDashboardRecord
+    ? [
+        [selectedDashboardRecord.type === "dataset" ? "dataset_id" : "model_id", selectedPayload.dataset_id || selectedPayload.model_id || "—"],
+        ["name", selectedPayload.name || selectedPayload.original_filename || "—"],
+        ["type", selectedPayload.type || selectedPayload.task_type || "—"],
+        ["version", selectedPayload.version || "—"],
+        ["source", selectedPayload.source || "—"],
+        ["created_at", formatDateTime(selectedPayload.created_at)],
+      ]
+    : [];
+
   const numericHeaders = useMemo(() => {
     return headers.filter((header) =>
       tableRows.some((row) => isNumericValue(row[header]))
@@ -715,71 +866,108 @@ export default function MainWorkspace({
       exit={{ opacity: 0, y: -8 }}
       className="space-y-8"
     >
-      <div className="sticky top-0 z-20 -mx-2 rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Workspace</h1>
-            <p className="text-sm text-slate-500">
-              Upload, preview, configure, and run analysis in one flow.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="rounded-2xl" onClick={() => uploadRef.current?.scrollIntoView({ behavior: "smooth" })}>Upload</Button>
-            <Button variant="outline" className="rounded-2xl" onClick={() => previewRef.current?.scrollIntoView({ behavior: "smooth" })}>Preview</Button>
-            <Button variant="outline" className="rounded-2xl" onClick={() => configRef.current?.scrollIntoView({ behavior: "smooth" })}>Configure</Button>
-          </div>
-        </div>
-      </div>
-
+      {/* Summary Dashboard */}
       <section>
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Dashboard</h2>
-          <p className="text-sm text-slate-500">Real summary of uploaded datasets and recent activity.</p>
+          <p className="text-sm text-slate-500">Summary of backend datasets, available ML models, and recent jobs.</p>
         </div>
 
+        {dashboardError ? (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {dashboardError}
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <StatCard title="Datasets" value={uploadedDatasets.length} sub={uploadedDatasets.length ? "uploaded in this workspace" : "No dataset uploaded yet"} icon={Database} />
-          <StatCard title="Analyses" value={analysisRuns.length} sub={analysisRuns.length ? "completed runs" : "No completed analysis yet"} icon={BarChart3} />
-          <StatCard title="Last Run" value={analysisRuns.length ? formatDateTime(analysisRuns[0].completedAt) : "—"} sub="Most recent analysis" icon={Clock3} />
+          <StatCard
+            title="Datasets"
+            value={dashboardLoading ? "..." : dashboardDatasets.length}
+            sub={dashboardDatasets.length ? "stored dataset records" : "No dataset metadata found"}
+            icon={Database}
+          />
+          <StatCard
+            title="ML Models"
+            value={dashboardLoading ? "..." : dashboardModels.length}
+            sub={dashboardModels.length ? "registered model records" : "No model metadata found"}
+            icon={BarChart3}
+          />
+          <StatCard
+            title="Latest Dataset"
+            value={dashboardLoading ? "..." : latestDataset ? formatDateTime(getRecordTimestamp(latestDataset)) : "—"}
+            sub={latestDataset ? getDatasetDisplayName(latestDataset) : "Most recent dataset upload"}
+            icon={Clock3}
+          />
         </div>
 
         <Card className="mt-6 rounded-[28px] border-slate-200">
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest uploads and analysis runs in this workspace.</CardDescription>
+            <CardTitle>Stored Assets Details</CardTitle>
+            <CardDescription>Datasets and models in our resources.</CardDescription>
           </CardHeader>
 
           <CardContent>
-            {!uploadedDatasets.length && !analysisRuns.length ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">No activity yet.</div>
+            {dashboardLoading ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Loading backend records...</div>
+            ) : !recentDashboardItems.length ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">No backend records found.</div>
             ) : (
               <div className="space-y-3">
-                {uploadedDatasets.slice(0, 3).map((dataset) => (
-                  <div key={`upload-${dataset.id}`} className="flex items-center justify-between rounded-2xl border p-4">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Uploaded dataset</p>
-                      <p className="max-w-[260px] truncate text-xs text-slate-500">{dataset.name}</p>
+                {recentDashboardItems.map((item) => (
+                  <div key={`${item.type}-${item.id}`} className="flex items-center justify-between gap-4 rounded-2xl border p-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">{item.label}</p>
+                      <p className="max-w-[360px] truncate text-xs text-slate-500">{item.name}</p>
+                      <p className="mt-1 max-w-[360px] truncate font-mono text-[11px] text-slate-400">
+                        {item.type === "dataset" ? "dataset_id" : "model_id"}: {item.id || "—"}
+                      </p>
                     </div>
-                    <span className="text-xs text-slate-400">{formatDateTime(dataset.uploadedAt)}</span>
-                  </div>
-                ))}
-
-                {analysisRuns.slice(0, 3).map((run, index) => (
-                  <div key={`run-${index}`} className="flex items-center justify-between rounded-2xl border p-4">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Analysis completed</p>
-                      <p className="text-xs text-slate-500">{formatModelName(run.classifier)}</p>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-xs text-slate-400">{formatDateTime(item.timestamp)}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        disabled={!item.id || selectedDashboardRecordLoading}
+                        onClick={() => handleOpenDashboardRecord(item)}
+                      >
+                        View metadata
+                      </Button>
                     </div>
-                    <span className="text-xs text-slate-400">{formatDateTime(run.completedAt)}</span>
                   </div>
                 ))}
               </div>
             )}
+
+            {selectedDashboardRecordError ? (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {selectedDashboardRecordError}
+              </div>
+            ) : null}
+
+            {selectedDashboardRecordLoading ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">
+                Loading selected metadata...
+              </div>
+            ) : selectedDashboardRecord ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="mb-3 text-sm font-medium text-slate-900">Selected metadata</p>
+                <div className="grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+                  {selectedRecordRows.map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-white px-3 py-2">
+                      <p className="font-mono text-[11px] text-slate-400">{label}</p>
+                      <p className="mt-1 break-words text-slate-700">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </section>
 
+      {/* File Upload and Recent Datasets */}
       <section ref={uploadRef} className="scroll-mt-28">
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Upload Dataset</h2>
@@ -873,6 +1061,7 @@ export default function MainWorkspace({
         </Card>
       </section>
 
+      {/* Dataset Preview */}
       <section ref={previewRef} className="scroll-mt-28">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -962,6 +1151,7 @@ export default function MainWorkspace({
         )}
       </section>
 
+      {/* Analysis Configuration */}
       <section ref={configRef} className="scroll-mt-28">
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Configure Analysis</h2>
