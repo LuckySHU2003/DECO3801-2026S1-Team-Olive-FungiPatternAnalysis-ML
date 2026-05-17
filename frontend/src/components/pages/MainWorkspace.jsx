@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   UploadCloud,
@@ -9,6 +9,11 @@ import {
   Database,
   BarChart3,
   SlidersHorizontal,
+  Trash2,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
+  SearchCheck,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -528,6 +533,7 @@ function RangeSliderControl({ label, min, max, value, onChange, step = 0.01 }) {
   );
 }
 
+{/* Main workspace for data upload, preview, and analysis configuration. */ }
 export default function MainWorkspace({
   setPage,
   startAnalysis,
@@ -571,6 +577,7 @@ export default function MainWorkspace({
   const [xRange, setXRange] = useState([0, 0]);
   const [yRange, setYRange] = useState([0, 0]);
 
+  {/* Dashboard Summary state and effects */ }
   const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
   const [dashboardDatasets, setDashboardDatasets] = useState([]);
   const [dashboardModels, setDashboardModels] = useState([]);
@@ -580,6 +587,16 @@ export default function MainWorkspace({
   const [selectedDashboardRecordLoading, setSelectedDashboardRecordLoading] = useState(false);
   const [selectedDashboardRecordError, setSelectedDashboardRecordError] = useState("");
 
+  {/* Upload features state and effects */ }
+  const [datasetUploadLoading, setDatasetUploadLoading] = useState(false);
+  const [datasetUploadError, setDatasetUploadError] = useState("");
+  const [datasetUploadSuccess, setDatasetUploadSuccess] = useState("");
+  const [selectedBackendDataset, setSelectedBackendDataset] = useState(null);
+  const [selectedBackendDatasetLoading, setSelectedBackendDatasetLoading] = useState(false);
+  const [selectedBackendDatasetError, setSelectedBackendDatasetError] = useState("");
+  const [deletingDatasetId, setDeletingDatasetId] = useState("");
+
+  {/* Backend API setup & helpers */ }
   const normalizeApiList = (payload, key) => {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.[key])) return payload[key];
@@ -604,59 +621,49 @@ export default function MainWorkspace({
     return record?.created_at || record?.createdAt || record?.uploadedAt || record?.updatedAt || null;
   };
 
-  useEffect(() => {
-    let ignore = false;
+  {/* Fetch datasets and models from the backend API */ }
+  const fetchBackendResources = useCallback(async ({ silent = false } = {}) => {
+    if (!API_URL) {
+      setDashboardError("Missing VITE_API_URL. Add your Render backend URL to the frontend .env file.");
+      return;
+    }
 
-    const fetchDashboardData = async () => {
-      if (!API_URL) {
-        setDashboardError("Missing VITE_API_URL. Add your Render backend URL to the frontend .env file.");
-        return;
+    if (!silent) setDashboardLoading(true);
+    setDashboardError("");
+
+    try {
+      const [datasetsResponse, modelsResponse] = await Promise.all([
+        fetch(`${API_URL}/datasets`),
+        fetch(`${API_URL}/models`),
+      ]);
+
+      if (!datasetsResponse.ok) {
+        throw new Error(`Failed to load datasets (${datasetsResponse.status})`);
       }
 
-      setDashboardLoading(true);
-      setDashboardError("");
-
-      try {
-        const [datasetsResponse, modelsResponse] = await Promise.all([
-          fetch(`${API_URL}/datasets`),
-          fetch(`${API_URL}/models`),
-        ]);
-
-        if (!datasetsResponse.ok) {
-          throw new Error(`Failed to load datasets (${datasetsResponse.status})`);
-        }
-
-        if (!modelsResponse.ok) {
-          throw new Error(`Failed to load models (${modelsResponse.status})`);
-        }
-
-        const [datasetsPayload, modelsPayload] = await Promise.all([
-          datasetsResponse.json(),
-          modelsResponse.json(),
-        ]);
-
-        if (ignore) return;
-
-        setDashboardDatasets(normalizeApiList(datasetsPayload, "datasets"));
-        setDashboardModels(normalizeApiList(modelsPayload, "models"));
-      } catch (error) {
-        if (!ignore) {
-          setDashboardError(error?.message || "Failed to load dashboard data.");
-        }
-      } finally {
-        if (!ignore) {
-          setDashboardLoading(false);
-        }
+      if (!modelsResponse.ok) {
+        throw new Error(`Failed to load models (${modelsResponse.status})`);
       }
-    };
 
-    fetchDashboardData();
+      const [datasetsPayload, modelsPayload] = await Promise.all([
+        datasetsResponse.json(),
+        modelsResponse.json(),
+      ]);
 
-    return () => {
-      ignore = true;
-    };
+      setDashboardDatasets(normalizeApiList(datasetsPayload, "datasets"));
+      setDashboardModels(normalizeApiList(modelsPayload, "models"));
+    } catch (error) {
+      setDashboardError(error?.message || "Failed to load backend resources.");
+    } finally {
+      if (!silent) setDashboardLoading(false);
+    }
   }, [API_URL]);
 
+  useEffect(() => {
+    fetchBackendResources();
+  }, [fetchBackendResources]);
+
+  {/* Retrieve the latest dataset and model payload */ }
   const latestDataset = useMemo(() => {
     return [...dashboardDatasets].sort((a, b) => {
       return new Date(getRecordTimestamp(b) || 0) - new Date(getRecordTimestamp(a) || 0);
@@ -710,6 +717,7 @@ export default function MainWorkspace({
     }
   };
 
+  {/* Select record metadata for display */ }
   const selectedPayload = selectedDashboardRecord?.payload || {};
   const selectedRecordRows = selectedDashboardRecord
     ? [
@@ -722,6 +730,8 @@ export default function MainWorkspace({
       ]
     : [];
 
+  
+  
   const numericHeaders = useMemo(() => {
     return headers.filter((header) =>
       tableRows.some((row) => isNumericValue(row[header]))
@@ -834,23 +844,197 @@ export default function MainWorkspace({
     }
   };
 
+  {/* File parsing helpers */ }
+  const parseCsvRows = (text) => {
+    return text
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== "")
+      .map((line) => line.split(",").map((cell) => cell.trim()));
+  };
+
+  const parseExcelRows = async (file) => {
+    const XLSX = await import("xlsx");
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+
+    if (!firstSheetName) return [];
+
+    const sheet = workbook.Sheets[firstSheetName];
+    return XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+    });
+  };
+
+  {/* Dataset validation helpers */ }
+  const validateDatasetRows = (rows) => {
+    const cleanedRows = rows
+      .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? "").trim()) : []))
+      .filter((row) => row.some((cell) => cell !== ""));
+
+    if (cleanedRows.length < 2) {
+      return "The dataset must include one header row and at least one data row.";
+    }
+
+    const [headersRow, ...dataRows] = cleanedRows;
+    const extraHeaderColumns = headersRow.slice(2).filter((cell) => cell !== "");
+
+    if (headersRow[0] !== "Time") {
+      return 'The first column header must be exactly "Time".';
+    }
+
+    if (!headersRow[1]) {
+      return "The second column must have a non-empty signal column name.";
+    }
+
+    if (extraHeaderColumns.length > 0) {
+      return "The dataset must contain exactly two columns: Time and one numeric signal column.";
+    }
+
+    for (const row of dataRows) {
+      const extraCells = row.slice(2).filter((cell) => cell !== "");
+      if (extraCells.length > 0) {
+        return "The dataset contains extra columns. Only Time and one numeric signal column are allowed.";
+      }
+
+      if (!row[0]) {
+        return "Every data row must include a Time value.";
+      }
+
+      if (row[1] === "" || Number.isNaN(Number(row[1]))) {
+        return "Every value in the second column must be numeric.";
+      }
+    }
+
+    return "";
+  };
+
+  const validateDatasetFile = async (file) => {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+
+    if (!["csv", "xlsx", "xls"].includes(extension)) {
+      return "Only CSV, XLSX, and XLS files are supported.";
+    }
+
+    const rows = extension === "csv"
+      ? parseCsvRows(await file.text())
+      : await parseExcelRows(file);
+
+    return validateDatasetRows(rows);
+  };
+
+  const refreshBackendDatasetSelection = async (datasetId) => {
+    if (!API_URL || !datasetId) return;
+
+    setSelectedBackendDatasetLoading(true);
+    setSelectedBackendDatasetError("");
+
+    try {
+      const response = await fetch(`${API_URL}/datasets/${datasetId}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load dataset metadata (${response.status})`);
+      }
+
+      const payload = await response.json();
+      setSelectedBackendDataset(payload);
+    } catch (error) {
+      setSelectedBackendDatasetError(error?.message || "Failed to load selected dataset metadata.");
+    } finally {
+      setSelectedBackendDatasetLoading(false);
+    }
+  };
+
+  {/* Delete dataset helper */ }
+  const handleDeleteBackendDataset = async (dataset) => {
+    const datasetId = getDatasetId(dataset);
+    if (!API_URL || !datasetId) return;
+
+    const shouldDelete = window.confirm(`Delete dataset "${getDatasetDisplayName(dataset)}"?`);
+    if (!shouldDelete) return;
+
+    setDeletingDatasetId(datasetId);
+    setDatasetUploadError("");
+    setDatasetUploadSuccess("");
+
+    try {
+      const response = await fetch(`${API_URL}/datasets/${datasetId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete dataset (${response.status}). Confirm the backend DELETE /datasets/:dataset_id route exists.`);
+      }
+
+      if (getDatasetId(selectedBackendDataset) === datasetId) {
+        setSelectedBackendDataset(null);
+      }
+
+      setDatasetUploadSuccess("Dataset deleted.");
+      await fetchBackendResources({ silent: true });
+    } catch (error) {
+      setDatasetUploadError(error?.message || "Failed to delete dataset.");
+    } finally {
+      setDeletingDatasetId("");
+    }
+  };
+
+  {/* File conversion to payload Helpers */ }
   const handleChooseFile = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    onFileUpload?.(file);
     e.target.value = "";
 
-    setTimeout(() => {
-      previewRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
+    if (!file) return;
+
+    setDatasetUploadLoading(true);
+    setDatasetUploadError("");
+    setDatasetUploadSuccess("");
+
+    try {
+      if (!API_URL) {
+        throw new Error("Missing VITE_API_URL. Add your Render backend URL to the frontend .env file.");
+      }
+
+      const validationError = await validateDatasetFile(file);
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${API_URL}/datasets/upload`, {
+        method: "POST",
+        body: formData,
       });
-    }, 200);
+
+      if (!response.ok) {
+        let message = `Failed to upload dataset (${response.status})`;
+        try {
+          const errorPayload = await response.json();
+          message = errorPayload?.message || errorPayload?.error || message;
+        } catch {
+          const errorText = await response.text();
+          if (errorText) message = errorText;
+        }
+        throw new Error(message);
+      }
+
+      const uploadedDataset = await response.json();
+      setSelectedBackendDataset(uploadedDataset);
+      setDatasetUploadSuccess(`Uploaded dataset: ${uploadedDataset?.name || uploadedDataset?.original_filename || file.name}`);
+      await fetchBackendResources({ silent: true });
+    } catch (error) {
+      setDatasetUploadError(error?.message || "Failed to upload dataset.");
+    } finally {
+      setDatasetUploadLoading(false);
+    }
   };
 
   const handleRunAnalysis = () => {
@@ -967,98 +1151,185 @@ export default function MainWorkspace({
         </Card>
       </section>
 
-      {/* File Upload and Recent Datasets */}
+      {/* Dataset Upload and Selection */}
       <section ref={uploadRef} className="scroll-mt-28">
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Upload Dataset</h2>
-          <p className="text-sm text-slate-500">Upload a CSV or Excel file. Uploaded files are stored below and can be reopened.</p>
+          <p className="text-sm text-slate-500">
+            Upload a CSV or Excel dataset to the backend. The file must contain exactly two columns: Time and one numeric signal column.
+          </p>
         </div>
 
-        <Card className="rounded-[28px] border-2 border-dashed border-slate-200">
-          <CardContent className="flex min-h-[260px] flex-col items-center justify-center p-8 text-center">
-            <div className="rounded-full bg-emerald-50 p-4 text-emerald-600">
-              <UploadCloud className="h-9 w-9" />
-            </div>
-
-            <h3 className="mt-5 text-2xl font-semibold text-slate-900">Upload your file</h3>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">Supports CSV, XLSX, and XLS files. Excel files with multiple sheets can be selected in preview.</p>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-
-            <Button className="mt-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700" onClick={handleChooseFile}>
-              <UploadCloud className="mr-2 h-4 w-4" />
-              Choose File
-            </Button>
-
-            {datasetName && (
-              <div className="mt-6 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                <FileText className="h-4 w-4 text-slate-500" />
-                Current dataset: {datasetName}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="rounded-[28px] border-2 border-dashed border-slate-200">
+            <CardContent className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center">
+              <div className="rounded-full bg-emerald-50 p-4 text-emerald-600">
+                {datasetUploadLoading ? <Loader2 className="h-9 w-9 animate-spin" /> : <UploadCloud className="h-9 w-9" />}
               </div>
-            )}
-          </CardContent>
-        </Card>
 
-        <Card className="mt-6 rounded-[28px] border-slate-200">
-          <CardHeader>
-            <CardTitle>Uploaded datasets</CardTitle>
-            <CardDescription>Reopen a previous upload and continue previewing or configuring it.</CardDescription>
-          </CardHeader>
+              <h3 className="mt-5 text-2xl font-semibold text-slate-900">Upload dataset file</h3>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
+                Accepted formats: CSV, XLSX, XLS. Required structure: first header exactly "Time", second header as one numeric signal column, with no extra columns.
+              </p>
 
-          <CardContent>
-            {!uploadedDatasets.length ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">No uploaded datasets yet.</div>
-            ) : (
-              <div className="space-y-3">
-                {uploadedDatasets.map((dataset) => (
-                  <div key={dataset.id} className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-slate-500" />
-                        <p className="truncate font-medium text-slate-900">{dataset.name}</p>
-                      </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={handleFileChange}
+                disabled={datasetUploadLoading}
+              />
 
-                      <div className="mt-2 grid gap-2 text-sm text-slate-500 sm:grid-cols-3">
-                        <div className="flex items-center gap-2">
-                          <Table2 className="h-4 w-4" />
-                          <span>{dataset.rows} rows · {dataset.columns} columns</span>
+              <Button
+                className="mt-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700"
+                onClick={handleChooseFile}
+                disabled={datasetUploadLoading}
+              >
+                {datasetUploadLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                )}
+                {datasetUploadLoading ? "Uploading..." : "Choose File"}
+              </Button>
+
+              {datasetUploadError ? (
+                <div className="mt-5 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-700">
+                  {datasetUploadError}
+                </div>
+              ) : null}
+
+              {datasetUploadSuccess ? (
+                <div className="mt-5 flex w-full items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{datasetUploadSuccess}</span>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[28px] border-slate-200">
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Select uploaded dataset</CardTitle>
+                  <CardDescription>Datasets loaded from the backend dataset metadata endpoint.</CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => fetchBackendResources({ silent: false })}
+                  disabled={dashboardLoading}
+                >
+                  <RefreshCw className={dashboardLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {dashboardLoading ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">Loading uploaded datasets...</div>
+              ) : !dashboardDatasets.length ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-400">No uploaded datasets found.</div>
+              ) : (
+                <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+                  {dashboardDatasets.map((dataset) => {
+                    const datasetId = getDatasetId(dataset);
+                    const isSelected = getDatasetId(selectedBackendDataset) === datasetId;
+                    const isDeleting = deletingDatasetId === datasetId;
+
+                    return (
+                      <div
+                        key={datasetId || getDatasetDisplayName(dataset)}
+                        className={isSelected
+                          ? "rounded-2xl border border-emerald-300 bg-emerald-50 p-4"
+                          : "rounded-2xl border border-slate-200 bg-white p-4"}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-slate-500" />
+                              <p className="truncate font-medium text-slate-900">{getDatasetDisplayName(dataset)}</p>
+                            </div>
+                            <p className="mt-1 truncate font-mono text-[11px] text-slate-400">dataset_id: {datasetId || "—"}</p>
+                            <p className="mt-1 text-xs text-slate-500">Created: {formatDateTime(getRecordTimestamp(dataset))}</p>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl"
+                              disabled={!datasetId || selectedBackendDatasetLoading}
+                              onClick={() => {
+                                if (getDatasetId(selectedBackendDataset) === datasetId) {
+                                  setSelectedBackendDataset(null);
+                                  setSelectedBackendDatasetError("");
+                                  return;
+                                }
+
+                                refreshBackendDatasetSelection(datasetId);
+                              }}
+                            >
+                              <SearchCheck className="mr-2 h-4 w-4" />
+                              Select Dataset
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl text-red-600 hover:text-red-700"
+                              disabled={!datasetId || isDeleting}
+                              onClick={() => handleDeleteBackendDataset(dataset)}
+                            >
+                              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                              Delete
+                            </Button>
+                          </div>
                         </div>
-                        <div className="truncate">Sheet: {dataset.sheet || "Default"}</div>
-                        <div className="flex items-center gap-2">
-                          <Clock3 className="h-4 w-4" />
-                          <span>{formatDateTime(dataset.uploadedAt)}</span>
-                        </div>
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                    <Button
-                      variant="outline"
-                      className="rounded-2xl"
-                      onClick={() => {
-                        onOpenUploadedDataset?.(dataset);
-                        setTimeout(() => {
-                          previewRef.current?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
-                        }, 100);
-                      }}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      Preview
-                    </Button>
+              {selectedBackendDatasetError ? (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {selectedBackendDatasetError}
+                </div>
+              ) : null}
+
+              {selectedBackendDatasetLoading ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">
+                  Loading selected dataset metadata...
+                </div>
+              ) : selectedBackendDataset ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="mb-3 text-sm font-medium text-slate-900">Selected dataset metadata</p>
+                  <div className="grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+                    {[
+                      ["dataset_id", selectedBackendDataset.dataset_id || "—"],
+                      ["name", selectedBackendDataset.name || "—"],
+                      ["original_filename", selectedBackendDataset.original_filename || "—"],
+                      ["source", selectedBackendDataset.source || "—"],
+                      ["created_at", formatDateTime(selectedBackendDataset.created_at)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl bg-white px-3 py-2">
+                        <p className="font-mono text-[11px] text-slate-400">{label}</p>
+                        <p className="mt-1 break-words text-slate-700">{value}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       {/* Dataset Preview */}

@@ -62,4 +62,18 @@ export class DatasetService {
     if (!doc) throw new Error('Dataset not found');
     return toDatasetResponse(doc);
   }
+
+  async deleteDatasetById(datasetId: string) {
+    const dataset = await DatasetModel.findOne({ dataset_id: datasetId });
+    if (!dataset) return false;
+    if (dataset.storage_path) {
+      const objectPath = dataset.storage_path.replace(/^datasets\//, '');
+
+      await supabase.storage
+        .from('datasets')
+        .remove([objectPath]);
+    }
+    await DatasetModel.deleteOne({ dataset_id: datasetId });
+    return true;
+  }
 }
