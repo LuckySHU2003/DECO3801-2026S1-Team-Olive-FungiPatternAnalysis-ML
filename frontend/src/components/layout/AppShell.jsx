@@ -17,7 +17,7 @@ import { HealthCard } from "@/components/ui/healthcard";
  * @param {Function} setMobileOpen - Sidebar toggle setter
  * @param {React.Node} children    - Page content rendered in <main>
  */
-export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, children }) {
+export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, onLogoClick, children }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="flex min-h-screen">
@@ -36,20 +36,22 @@ export default function AppShell({ page, setPage, mobileOpen, setMobileOpen, chi
           }`}
         >
           {/* Brand logo area */}
-          <div className="mb-6 flex items-start justify-between gap-3 px-2 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                <Sprout className="h-5 w-5" />
-              </div>
+          <button
+            type="button"
+            onClick={onLogoClick}
+            className="mb-6 flex items-center gap-3 px-2 py-3 text-left"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+              <Sprout className="h-5 w-5" />
+            </div>
 
-              <div>
-                <div className="text-lg font-semibold">MycoSignal</div>
-                <div className="text-xs text-slate-500">
-                  ML Platform for Fungal Bioelectrical Analysis
-                </div>
+            <div>
+              <div className="text-lg font-semibold">MycoSignal</div>
+              <div className="text-xs text-slate-500">
+                ML Platform for Fungal Bioelectrical Analysis
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Navigation items */}
           <div className="space-y-1">

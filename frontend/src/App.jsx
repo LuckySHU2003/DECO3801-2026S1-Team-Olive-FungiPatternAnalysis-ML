@@ -690,6 +690,10 @@ export default function App() {
         setPage={setPage}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
+        onLogoClick={() => {
+          setHasEntered(false);
+          setMobileOpen(false);
+        }}
       >
         <AnimatePresence mode="wait">
           {page === "workspace" && (
