@@ -596,6 +596,12 @@ export default function MainWorkspace({
   const [selectedBackendDatasetError, setSelectedBackendDatasetError] = useState("");
   const [deletingDatasetId, setDeletingDatasetId] = useState("");
 
+  {/* Dataset Preview state and effects */ }
+  const [datasetPreviewHeaders, setDatasetPreviewHeaders] = useState([]);
+  const [datasetPreviewRows, setDatasetPreviewRows] = useState([]);
+  const [datasetPreviewLoading, setDatasetPreviewLoading] = useState(false);
+  const [datasetPreviewError, setDatasetPreviewError] = useState("");
+
   {/* Backend API setup & helpers */ }
   const normalizeApiList = (payload, key) => {
     if (Array.isArray(payload)) return payload;
@@ -947,6 +953,68 @@ export default function MainWorkspace({
     }
   };
 
+  {/* Build Preview Data */ }
+  const loadSelectedDatasetPreview = useCallback(async (dataset) => {
+    if (!dataset) {
+      setDatasetPreviewHeaders([]);
+      setDatasetPreviewRows([]);
+      setDatasetPreviewError("");
+      setDatasetPreviewLoading(false);
+      return;
+    }
+
+    const datasetId = getDatasetId(dataset);
+
+    if (!datasetId) {
+      setDatasetPreviewHeaders([]);
+      setDatasetPreviewRows([]);
+      setDatasetPreviewError("Selected dataset does not include a dataset ID.");
+      setDatasetPreviewLoading(false);
+      return;
+    }
+
+    if (!API_URL) {
+      setDatasetPreviewHeaders([]);
+      setDatasetPreviewRows([]);
+      setDatasetPreviewError("VITE_API_URL is not configured.");
+      setDatasetPreviewLoading(false);
+      return;
+    }
+
+    setDatasetPreviewLoading(true);
+    setDatasetPreviewError("");
+
+    try {
+      const response = await fetch(`${API_URL}/datasets/${datasetId}/preview`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load dataset preview (${response.status}).`);
+      }
+
+      const payload = await response.json();
+
+      const previewHeaders = Array.isArray(payload?.headers) ? payload.headers : [];
+      const previewRows = Array.isArray(payload?.rows) ? payload.rows : [];
+
+      if (!previewHeaders.length || !previewRows.length) {
+        throw new Error("No previewable rows found in the selected dataset.");
+      }
+
+      setDatasetPreviewHeaders(previewHeaders);
+      setDatasetPreviewRows(previewRows);
+    } catch (error) {
+      setDatasetPreviewHeaders([]);
+      setDatasetPreviewRows([]);
+      setDatasetPreviewError(error?.message || "Failed to load dataset preview.");
+    } finally {
+      setDatasetPreviewLoading(false);
+    }
+  }, [API_URL]);
+
+  useEffect(() => {
+    loadSelectedDatasetPreview(selectedBackendDataset);
+  }, [selectedBackendDataset, loadSelectedDatasetPreview]);
+  
   {/* Delete dataset helper */ }
   const handleDeleteBackendDataset = async (dataset) => {
     const datasetId = getDatasetId(dataset);
@@ -1337,21 +1405,42 @@ export default function MainWorkspace({
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold text-slate-900">Dataset Preview</h2>
-            <p className="text-sm text-slate-500">Select axes and ranges before running analysis.</p>
+            <p className="text-sm text-slate-500">View live preview of the selected dataset</p>
           </div>
 
           <Button
             className="rounded-2xl bg-emerald-600 hover:bg-emerald-700"
-            disabled={!hasUploadedData}
+            disabled={!selectedBackendDataset || datasetPreviewLoading || !datasetPreviewRows.length}
             onClick={() => configRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
           >
             Continue to configuration
           </Button>
         </div>
 
-        {!hasUploadedData ? (
+        {!selectedBackendDataset ? (
           <Card className="rounded-[28px] border-2 border-dashed border-slate-200">
-            <CardContent className="flex min-h-[320px] flex-col items-center justify-center p-8 text-center text-slate-500">No dataset uploaded yet.</CardContent>
+            <CardContent className="flex min-h-[320px] flex-col items-center justify-center p-8 text-center text-slate-500">
+              Select a dataset from the uploaded dataset list to preview it here.
+            </CardContent>
+          </Card>
+        ) : datasetPreviewLoading ? (
+          <Card className="rounded-[28px] border-2 border-dashed border-slate-200">
+            <CardContent className="flex min-h-[320px] flex-col items-center justify-center p-8 text-center text-slate-500">
+              <Loader2 className="mb-3 h-6 w-6 animate-spin text-emerald-600" />
+              Loading dataset preview...
+            </CardContent>
+          </Card>
+        ) : datasetPreviewError ? (
+          <Card className="rounded-[28px] border-red-200 bg-red-50">
+            <CardContent className="flex min-h-[240px] flex-col items-center justify-center p-8 text-center text-red-700">
+              {datasetPreviewError}
+            </CardContent>
+          </Card>
+        ) : !datasetPreviewRows.length ? (
+          <Card className="rounded-[28px] border-2 border-dashed border-slate-200">
+            <CardContent className="flex min-h-[320px] flex-col items-center justify-center p-8 text-center text-slate-500">
+              No previewable rows found for the selected dataset.
+            </CardContent>
           </Card>
         ) : (
           <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -1359,19 +1448,18 @@ export default function MainWorkspace({
               <CardContent className="space-y-5 p-5">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Dataset</p>
-                  <p className="mt-1 break-words text-sm font-medium text-slate-700">{datasetName}</p>
+                  <p className="mt-1 break-words text-sm font-medium text-slate-700">
+                    {getDatasetDisplayName(selectedBackendDataset)}
+                  </p>
+                  <p className="mt-1 break-words font-mono text-[11px] text-slate-400">
+                    dataset_id: {getDatasetId(selectedBackendDataset) || "—"}
+                  </p>
                 </div>
 
-                {sheetNames.length > 1 && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Excel Sheet</label>
-                    <select value={selectedSheet} onChange={(e) => onSheetChange?.(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3">
-                      {sheetNames.map((sheet) => (
-                        <option key={sheet} value={sheet}>{sheet}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Rows</p>
+                  <p className="mt-1 text-sm font-medium text-slate-700">{datasetPreviewRows.length}</p>
+                </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">X Axis</label>
