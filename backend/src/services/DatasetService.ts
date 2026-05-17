@@ -3,6 +3,7 @@ import { env } from '../config/env.js';
 import { supabase } from '../config/supabase.js';
 import { DatasetModel } from '../models/Dataset.js';
 import { makeStoragePath } from '../utils/ids.js';
+import mongoose from 'mongoose';
 import type { DatasetResponseDTO } from '../dto/dataset.dto.js';
 
 function toDatasetResponse(doc: any): DatasetResponseDTO {
@@ -63,17 +64,29 @@ export class DatasetService {
     return toDatasetResponse(doc);
   }
 
-  async deleteDatasetById(datasetId: string) {
-    const dataset = await DatasetModel.findOne({ dataset_id: datasetId });
+  async deleteDatasetById(id: string): Promise<boolean> {
+    const query = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ dataset_id: id }, { _id: new mongoose.Types.ObjectId(id) }] }
+      : { dataset_id: id };
+
+    const dataset = await DatasetModel.findOne(query);
+
     if (!dataset) return false;
+
     if (dataset.storage_path) {
       const objectPath = dataset.storage_path.replace(/^datasets\//, '');
 
-      await supabase.storage
+      const { error } = await supabase.storage
         .from('datasets')
         .remove([objectPath]);
+
+      if (error) {
+        throw new Error(`Failed to delete Supabase file: ${error.message}`);
+      }
     }
-    await DatasetModel.deleteOne({ dataset_id: datasetId });
+
+    await DatasetModel.deleteOne(query);
+
     return true;
   }
 }
