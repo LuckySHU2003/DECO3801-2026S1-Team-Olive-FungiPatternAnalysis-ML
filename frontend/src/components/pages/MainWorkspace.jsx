@@ -1294,14 +1294,6 @@ export default function MainWorkspace({
             <h2 className="text-2xl font-semibold text-slate-900">Dataset Preview</h2>
             <p className="text-sm text-slate-500">Select a backend dataset, then inspect its signal before running analysis.</p>
           </div>
-
-          <Button
-            className="rounded-2xl bg-emerald-600 hover:bg-emerald-700"
-            disabled={!selectedBackendDataset || datasetPreviewLoading || !datasetPreviewRows.length}
-            onClick={() => configRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          >
-            Continue to configuration
-          </Button>
         </div>
 
         {!selectedBackendDataset ? (
@@ -1488,8 +1480,6 @@ export default function MainWorkspace({
             </Card>
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" className="rounded-2xl" onClick={() => setParamErrorOpen?.(true)}>Test validation</Button>
-              <Button variant="outline" className="rounded-2xl" onClick={() => setSaveConfigOpen?.(true)}>Save preset</Button>
               <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700" disabled={!hasUploadedData} onClick={handleRunAnalysis}>Run analysis</Button>
             </div>
           </div>
