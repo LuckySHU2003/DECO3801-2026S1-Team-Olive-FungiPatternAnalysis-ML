@@ -23,8 +23,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import StatCard from "@/components/shared/StatCard";
 
+function toNumberOrNull(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function isNumericValue(value) {
-  return typeof value === "number" && !Number.isNaN(value);
+  return toNumberOrNull(value) !== null;
 }
 
 function isTimeLikeHeader(header = "") {
@@ -62,11 +71,11 @@ function formatModelName(value) {
 function buildGraphPoints({ rows, xColumn, yColumn, xRange, yRange }) {
   return rows
     .map((row, index) => {
-      const y = row[yColumn];
-      if (!isNumericValue(y)) return null;
+      const y = toNumberOrNull(row[yColumn]);
+      if (y === null) return null;
 
-      const xRaw = row[xColumn];
-      const x = isNumericValue(xRaw) ? xRaw : index;
+      const parsedX = toNumberOrNull(row[xColumn]);
+      const x = parsedX !== null ? parsedX : index;
 
       if (xRange && (x < xRange[0] || x > xRange[1])) return null;
       if (yRange && (y < yRange[0] || y > yRange[1])) return null;
@@ -76,45 +85,6 @@ function buildGraphPoints({ rows, xColumn, yColumn, xRange, yRange }) {
     .filter(Boolean);
 }
 
-function detectPreviewSpikes(points = []) {
-  if (points.length < 5) return [];
-
-  const values = points.map((p) => p.y);
-  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
-  const variance =
-    values.reduce((sum, v) => sum + (v - avg) ** 2, 0) / values.length;
-  const sd = Math.sqrt(variance);
-  const threshold = avg + sd * 0.8;
-
-  const detected = [];
-
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const current = points[i];
-
-    if (
-      current.y > threshold &&
-      current.y > points[i - 1].y &&
-      current.y > points[i + 1].y
-    ) {
-      detected.push(current);
-    }
-  }
-
-  return detected;
-}
-
-function getSpikeMeaning(spike, points) {
-  if (!spike || !points.length) return "No spike selected.";
-
-  const values = points.map((p) => p.y);
-  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
-
-  if (spike.y > avg) {
-    return "This spike shows a sudden increase in signal activity compared with the surrounding values.";
-  }
-
-  return "This point is a local signal change, but it is not much higher than the overall average.";
-}
 
 function SimpleSignalChart({
   points = [],
@@ -128,7 +98,6 @@ function SimpleSignalChart({
 }) {
   const [dragStart, setDragStart] = useState(null);
   const [dragEnd, setDragEnd] = useState(null);
-  const [selectedSpike, setSelectedSpike] = useState(null);
 
   if (!points.length) {
     return (
@@ -182,7 +151,6 @@ function SimpleSignalChart({
 
   const handleMouseDown = (event) => {
     if (!selectable) return;
-    setSelectedSpike(null);
     const point = getSvgPoint(event);
     setDragStart(point);
     setDragEnd(point);
@@ -226,7 +194,7 @@ function SimpleSignalChart({
     (_, i) => minY + ((maxY - minY) * i) / 4
   );
 
-  const chartSpikes = spikes.length ? spikes : detectPreviewSpikes(points);
+  const chartSpikes = spikes;
 
   const brushX =
     dragStart !== null && dragEnd !== null ? Math.min(dragStart.x, dragEnd.x) : null;
@@ -242,7 +210,7 @@ function SimpleSignalChart({
       <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-500">
         <span>
           {selectable
-            ? "Drag a box around a time area to zoom in. Click red dots to inspect spikes."
+            ? "Drag a box around a time area to zoom in."
             : "Signal preview based on current data."}
         </span>
 
@@ -342,17 +310,7 @@ function SimpleSignalChart({
               fill="#ef4444"
               stroke="#ffffff"
               strokeWidth="2"
-              className="cursor-pointer"
               onMouseDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedSpike({
-                  ...spike,
-                  screenX: toX(spike.x),
-                  screenY: toY(spike.y),
-                  meaning: getSpikeMeaning(spike, points),
-                });
-              }}
             />
           ))}
 
@@ -374,8 +332,8 @@ function SimpleSignalChart({
             Y: {yLabel}
           </text>
           <text
-            x={width - paddingRight}
-            y={height - 12}
+            x={width - paddingRight + 28}
+            y={height}
             textAnchor="end"
             fontSize="12"
             fill="#64748b"
@@ -384,82 +342,6 @@ function SimpleSignalChart({
           </text>
         </svg>
 
-        {selectedSpike && (
-          <div
-            className="absolute z-10 max-w-[270px] rounded-2xl border bg-white p-4 text-sm shadow-lg"
-            style={{
-              left: `${Math.min((selectedSpike.screenX / width) * 100, 72)}%`,
-              top: `${Math.max((selectedSpike.screenY / height) * 100 - 8, 4)}%`,
-            }}
-          >
-            <div className="mb-2 flex items-start justify-between gap-3">
-              <p className="font-semibold text-slate-900">Spike detail</p>
-              <button
-                type="button"
-                className="text-slate-400 hover:text-slate-700"
-                onClick={() => setSelectedSpike(null)}
-              >
-                ×
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              X: {formatAxisValue(selectedSpike.x)}
-            </p>
-            <p className="text-xs text-slate-500">
-              Y: {formatAxisValue(selectedSpike.y)}
-            </p>
-
-            <div className="mt-3 h-12 rounded-xl bg-slate-50 px-2 py-1">
-              <svg viewBox="0 0 180 42" className="h-full w-full">
-                {(() => {
-                  const index = points.findIndex(
-                    (p) => p.index === selectedSpike.index
-                  );
-
-                  const local = points.slice(
-                    Math.max(0, index - 8),
-                    Math.min(points.length, index + 9)
-                  );
-
-                  if (local.length < 2) return null;
-
-                  const localX = local.map((p) => p.x);
-                  const localY = local.map((p) => p.y);
-                  const lxMin = Math.min(...localX);
-                  const lxMax = Math.max(...localX);
-                  const lyMin = Math.min(...localY);
-                  const lyMax = Math.max(...localY);
-
-                  const miniPoints = local
-                    .map((p) => {
-                      const x =
-                        ((p.x - lxMin) / Math.max(lxMax - lxMin, 1e-6)) * 170 +
-                        5;
-                      const y =
-                        38 -
-                        ((p.y - lyMin) / Math.max(lyMax - lyMin, 1e-6)) * 34;
-                      return `${x},${y}`;
-                    })
-                    .join(" ");
-
-                  return (
-                    <polyline
-                      fill="none"
-                      stroke="#16a34a"
-                      strokeWidth="2"
-                      points={miniPoints}
-                    />
-                  );
-                })()}
-              </svg>
-            </div>
-
-            <p className="mt-3 text-xs leading-5 text-slate-600">
-              {selectedSpike.meaning}
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -739,14 +621,14 @@ export default function MainWorkspace({
   
   
   const numericHeaders = useMemo(() => {
-    return headers.filter((header) =>
-      tableRows.some((row) => isNumericValue(row[header]))
+    return datasetPreviewHeaders.filter((header) =>
+      datasetPreviewRows.some((row) => isNumericValue(row[header]))
     );
-  }, [headers, tableRows]);
+  }, [datasetPreviewHeaders, datasetPreviewRows]);
 
   const timeLikeHeaders = useMemo(() => {
-    return headers.filter((header) => isTimeLikeHeader(header));
-  }, [headers]);
+    return datasetPreviewHeaders.filter((header) => isTimeLikeHeader(header));
+  }, [datasetPreviewHeaders]);
 
   const xAxisHeaders = useMemo(() => {
     const merged = [...timeLikeHeaders];
@@ -761,7 +643,11 @@ export default function MainWorkspace({
   const yAxisHeaders = numericHeaders;
 
   useEffect(() => {
-    if (!xAxisHeaders.length || !yAxisHeaders.length) return;
+    if (!xAxisHeaders.length || !yAxisHeaders.length) {
+      setXColumn("");
+      setYColumn("");
+      return;
+    }
 
     const preferredX = timeLikeHeaders[0] || xAxisHeaders[0];
     const preferredY =
@@ -774,10 +660,10 @@ export default function MainWorkspace({
   const xRangeLimit = useMemo(() => {
     if (!xColumn) return null;
 
-    const values = tableRows
+    const values = datasetPreviewRows
       .map((row, index) => {
-        const raw = row[xColumn];
-        return isNumericValue(raw) ? raw : index;
+        const parsed = toNumberOrNull(row[xColumn]);
+        return parsed !== null ? parsed : index;
       })
       .filter((value) => isNumericValue(value));
 
@@ -787,14 +673,14 @@ export default function MainWorkspace({
       min: Math.min(...values),
       max: Math.max(...values),
     };
-  }, [tableRows, xColumn]);
+  }, [datasetPreviewRows, xColumn]);
 
   const yRangeLimit = useMemo(() => {
     if (!yColumn) return null;
 
-    const values = tableRows
-      .map((row) => row[yColumn])
-      .filter((value) => isNumericValue(value));
+    const values = datasetPreviewRows
+      .map((row) => toNumberOrNull(row[yColumn]))
+      .filter((value) => value !== null);
 
     if (!values.length) return null;
 
@@ -802,7 +688,7 @@ export default function MainWorkspace({
       min: Math.min(...values),
       max: Math.max(...values),
     };
-  }, [tableRows, yColumn]);
+  }, [datasetPreviewRows, yColumn]);
 
   useEffect(() => {
     if (!xRangeLimit) return;
@@ -823,24 +709,24 @@ export default function MainWorkspace({
     if (!xColumn || !yColumn) return [];
 
     return buildGraphPoints({
-      rows: tableRows,
+      rows: datasetPreviewRows,
       xColumn,
       yColumn,
       xRange,
       yRange,
     });
-  }, [tableRows, xColumn, yColumn, xRange, yRange]);
+  }, [datasetPreviewRows, xColumn, yColumn, xRange, yRange]);
 
   const updateYRangeForSelectedXRange = (nextXRange) => {
-    const selectedRows = tableRows.filter((row, index) => {
-      const raw = row[xColumn];
-      const x = isNumericValue(raw) ? raw : index;
+    const selectedRows = datasetPreviewRows.filter((row, index) => {
+      const parsed = toNumberOrNull(row[xColumn]);
+      const x = parsed !== null ? parsed : index;
       return x >= nextXRange[0] && x <= nextXRange[1];
     });
 
     const selectedYValues = selectedRows
-      .map((row) => row[yColumn])
-      .filter((value) => isNumericValue(value));
+      .map((row) => toNumberOrNull(row[yColumn]))
+      .filter((value) => value !== null);
 
     if (selectedYValues.length) {
       setYRange([
@@ -1237,7 +1123,8 @@ export default function MainWorkspace({
 
               <h3 className="mt-5 text-2xl font-semibold text-slate-900">Upload dataset file</h3>
               <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
-                Accepted formats: CSV, XLSX, XLS. Required structure: first header exactly "Time", second header as one numeric signal column, with no extra columns.
+                Accepted formats: CSV, XLSX, XLS. Required structure: first header exactly "Time", second header exactly "Voltage", with no extra columns.
+                Time column is a String Time format, and Voltage column is numeric values. Example: Time: 0, Voltage: 0.5
               </p>
 
               <input
@@ -1405,7 +1292,7 @@ export default function MainWorkspace({
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold text-slate-900">Dataset Preview</h2>
-            <p className="text-sm text-slate-500">View live preview of the selected dataset</p>
+            <p className="text-sm text-slate-500">Select a backend dataset, then inspect its signal before running analysis.</p>
           </div>
 
           <Button
