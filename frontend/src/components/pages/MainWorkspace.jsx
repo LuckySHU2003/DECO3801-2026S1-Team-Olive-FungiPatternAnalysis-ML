@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import StatCard from "@/components/shared/StatCard";
 
 function toNumberOrNull(value) {
@@ -483,6 +484,18 @@ export default function MainWorkspace({
   const [datasetPreviewRows, setDatasetPreviewRows] = useState([]);
   const [datasetPreviewLoading, setDatasetPreviewLoading] = useState(false);
   const [datasetPreviewError, setDatasetPreviewError] = useState("");
+
+  {/* Set analysis configuration state and effects */ }
+  const [detectPatternModelId, setDetectPatternModelId] = useState("");
+  const [customExplorationModelId, setCustomExplorationModelId] = useState("");
+  const [predictFutureModelId, setPredictFutureModelId] = useState("");
+  const [detectWindowSize, setDetectWindowSize] = useState("20");
+  const [detectMinInterval, setDetectMinInterval] = useState("5");
+  const [customWindowSize, setCustomWindowSize] = useState("20");
+  const [predictionWindow, setPredictionWindow] = useState("20");
+  const [analysisRunLoading, setAnalysisRunLoading] = useState(false);
+  const [analysisRunError, setAnalysisRunError] = useState("");
+  const [analysisRunSuccess, setAnalysisRunSuccess] = useState("");
 
   {/* Backend API setup & helpers */ }
   const normalizeApiList = (payload, key) => {
@@ -991,10 +1004,212 @@ export default function MainWorkspace({
     }
   };
 
-  const handleRunAnalysis = () => {
-    startAnalysis?.();
-    setPage("results");
+  const safeInteger = (value, fallback) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   };
+
+  {/* Build Payload Helpers */ }
+  const createRequestId = (prefix) => {
+    const randomPart = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${prefix}-${randomPart}`;
+  };
+
+  const buildBaseDatasetPayload = () => ({
+    dataset_id: getDatasetId(selectedBackendDataset),
+    source: selectedBackendDataset?.source || "supabase",
+    columns: {
+      time: xColumn || "Time",
+      voltage: yColumn || "Voltage",
+    },
+  });
+
+  const buildDetectionConfig = ({ modelName, windowSizeValue, minIntervalValue, includePredictionWindow = false }) => {
+    const config = {
+      model_name: modelName,
+      pattern_types: ["spike"],
+      mode: "raw",
+      null_filter: true,
+      window_size: safeInteger(windowSizeValue, 128),
+      min_interval: safeInteger(minIntervalValue, 5),
+    };
+
+    if (includePredictionWindow) {
+      config.prediction_window = safeInteger(predictionWindow, 20);
+    }
+
+    return config;
+  };
+
+  {/* Separate Payload Construction */ }
+  const modelsByTaskType = useMemo(() => {
+    return {
+      detect_patterns: dashboardModels.filter((model) => model?.task_type === "detect_patterns"),
+      custom_exploration: dashboardModels.filter((model) => model?.task_type === "custom_exploration"),
+      predict_future: dashboardModels.filter((model) => model?.task_type === "predict_future"),
+    };
+  }, [dashboardModels]);
+
+  const getSelectedModel = (taskType, modelId) => {
+    return modelsByTaskType[taskType]?.find((model) => getModelId(model) === modelId) || null;
+  };
+
+  const buildModelPayload = (model) => ({
+    model_id: getModelId(model),
+    name: model?.name || "",
+    type: model?.type || "",
+    version: model?.version || "",
+  });
+
+  const getDatasetColumnsPayload = () => ({
+    time: "Time",
+    voltage: "Voltage",
+  });
+
+  const getCurrentTimeRange = () => {
+    const fallbackStart = 0;
+    const fallbackEnd = datasetPreviewRows.length || 100;
+
+    if (Array.isArray(xRange) && xRange.length === 2) {
+      return {
+        start: Number(xRange[0]) || fallbackStart,
+        end: Number(xRange[1]) || fallbackEnd,
+      };
+    }
+
+    return {
+      start: fallbackStart,
+      end: fallbackEnd,
+    };
+  };
+
+  useEffect(() => {
+    const autoSelectModel = (models, currentId, setter) => {
+      if (!currentId && models.length) {
+        setter(getModelId(models[0]));
+      }
+    };
+
+    autoSelectModel(modelsByTaskType.detect_patterns, detectPatternModelId, setDetectPatternModelId);
+    autoSelectModel(modelsByTaskType.custom_exploration, customExplorationModelId, setCustomExplorationModelId);
+    autoSelectModel(modelsByTaskType.predict_future, predictFutureModelId, setPredictFutureModelId);
+  }, [modelsByTaskType, detectPatternModelId, customExplorationModelId, predictFutureModelId]);
+
+
+  const handleRunAnalysis = async () => {
+    setAnalysisRunError("");
+    setAnalysisRunSuccess("");
+
+    if (!API_URL) {
+      setAnalysisRunError("VITE_API_URL is not configured.");
+      return;
+    }
+
+    const datasetId = getDatasetId(selectedBackendDataset);
+
+    if (!datasetId) {
+      setAnalysisRunError("Select a backend dataset before running analysis.");
+      return;
+    }
+
+    const detectModel = getSelectedModel("detect_patterns", detectPatternModelId);
+    const explorationModel = getSelectedModel("custom_exploration", customExplorationModelId);
+    const predictionModel = getSelectedModel("predict_future", predictFutureModelId);
+
+    if (!detectModel || !explorationModel || !predictionModel) {
+      setAnalysisRunError("Select one valid model for each analysis job.");
+      return;
+    }
+
+    const baseDataset = {
+      dataset_id: datasetId,
+      source: "supabase",
+      columns: getDatasetColumnsPayload(),
+    };
+
+    const preprocessing = {
+      mode: "raw",
+      normalize: true,
+      missing_value_strategy: "interpolate",
+    };
+
+    const jobs = [
+      {
+        endpoint: `${API_URL}/workspace/jobs/detect-patterns`,
+        payload: {
+          job: "detect_patterns",
+          dataset: baseDataset,
+          preprocessing,
+          detection_config: {
+            pattern_types: ["spike", "oscillation"],
+            threshold: 0.5,
+            window_size: Number.parseInt(detectWindowSize, 10),
+            min_interval: Number.parseInt(detectMinInterval, 10),
+          },
+          model: buildModelPayload(detectModel),
+        },
+      },
+      {
+        endpoint: `${API_URL}/workspace/jobs/custom-exploration`,
+        payload: {
+          job: "custom_exploration",
+          dataset: baseDataset,
+          preprocessing,
+          analysis_config: {
+            threshold: 0.5,
+            window_size: Number.parseInt(customWindowSize, 10),
+            time_range: getCurrentTimeRange(),
+          },
+          model: buildModelPayload(explorationModel),
+          previous_run_id: null,
+        },
+      },
+      {
+        endpoint: `${API_URL}/workspace/jobs/predict-future`,
+        payload: {
+          job: "predict_future",
+          dataset: baseDataset,
+          preprocessing,
+          prediction_config: {
+            prediction_window: Number.parseInt(predictionWindow, 10),
+          },
+          model: buildModelPayload(predictionModel),
+        },
+      },
+    ];
+
+    setAnalysisRunLoading(true);
+
+    try {
+      const responses = [];
+
+      for (const { endpoint, payload } of jobs) {
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const responseText = await response.text();
+
+        if (!response.ok) {
+          throw new Error(responseText || `Job request failed (${response.status})`);
+        }
+
+        responses.push(responseText ? JSON.parse(responseText) : {});
+      }
+
+      setAnalysisRunSuccess(`Submitted ${responses.length} analysis jobs.`);
+      setPage("results");
+    } catch (error) {
+      console.error("Run analysis failed:", error);
+      setAnalysisRunError(error?.message || "Failed to submit analysis jobs.");
+    } finally {
+      setAnalysisRunLoading(false);
+    }
+  };
+
 
   return (
     <motion.div
@@ -1393,7 +1608,9 @@ export default function MainWorkspace({
       <section ref={configRef} className="scroll-mt-28">
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-slate-900">Configure Analysis</h2>
-          <p className="text-sm text-slate-500">Keep only working analysis settings before generating results.</p>
+          <p className="text-sm text-slate-500">
+            Configure backend workspace jobs for pattern detection, custom exploration, and future prediction.
+          </p>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -1403,49 +1620,130 @@ export default function MainWorkspace({
                 <SlidersHorizontal className="h-5 w-5 text-slate-500" />
                 Analysis settings
               </CardTitle>
-              <CardDescription>Select only the settings needed for the current frontend analysis.</CardDescription>
+              <CardDescription>
+                Select one compatible model for each backend job and set required integer fields.
+              </CardDescription>
             </CardHeader>
 
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Window size</Label>
-                <Select value={windowSize} onValueChange={setWindowSize}>
-                  <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="128">128</SelectItem>
-                    <SelectItem value="256">256</SelectItem>
-                    <SelectItem value="512">512</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardContent className="space-y-5">
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <p className="font-medium text-slate-900">Pattern Detection</p>
+                <p className="mt-1 text-xs text-slate-500">POST /workspace/jobs/detect-patterns</p>
 
-              <div className="space-y-2">
-                <Label>Classification model</Label>
-                <Select value={classifier} onValueChange={setClassifier}>
-                  <SelectTrigger className="rounded-2xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="random-forest">Random Forest</SelectItem>
-                    <SelectItem value="svm">SVM</SelectItem>
-                    <SelectItem value="gb">Gradient Boosting</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2 sm:col-span-3">
+                    <Label>Model for Pattern Detection</Label>
+                    <Select value={detectPatternModelId} onValueChange={setDetectPatternModelId}>
+                      <SelectTrigger className="rounded-2xl"><SelectValue placeholder="Select detect_patterns model" /></SelectTrigger>
+                      <SelectContent>
+                        {modelsByTaskType.detect_patterns.map((model) => (
+                          <SelectItem key={getModelId(model)} value={getModelId(model)}>
+                            {getModelDisplayName(model)} ({model?.version || "no version"})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="flex items-center justify-between rounded-2xl border p-4">
-                <div>
-                  <Label>Detrend signal</Label>
-                  <p className="mt-1 text-xs text-slate-500">Reduce slow drifting in the signal.</p>
+                  <div className="space-y-2">
+                    <Label>Window size</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={detectWindowSize}
+                      onChange={(e) => setDetectWindowSize(e.target.value)}
+                      className="rounded-2xl"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Min interval</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={detectMinInterval}
+                      onChange={(e) => setDetectMinInterval(e.target.value)}
+                      className="rounded-2xl"
+                    />
+                  </div>
                 </div>
-                <Switch checked={normalization} onCheckedChange={setNormalization} />
               </div>
 
-              <div className="flex items-center justify-between rounded-2xl border p-4">
-                <div>
-                  <Label>Prediction summary</Label>
-                  <p className="mt-1 text-xs text-slate-500">Include a simple forecast summary in results.</p>
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <p className="font-medium text-slate-900">Custom Exploration</p>
+                <p className="mt-1 text-xs text-slate-500">POST /workspace/jobs/custom-exploration</p>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2 sm:col-span-3">
+                    <Label>Model for Custom Exploration</Label>
+                    <Select value={customExplorationModelId} onValueChange={setCustomExplorationModelId}>
+                      <SelectTrigger className="rounded-2xl"><SelectValue placeholder="Select custom_exploration model" /></SelectTrigger>
+                      <SelectContent>
+                        {modelsByTaskType.custom_exploration.map((model) => (
+                          <SelectItem key={getModelId(model)} value={getModelId(model)}>
+                            {getModelDisplayName(model)} ({model?.version || "no version"})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Window size</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={customWindowSize}
+                      onChange={(e) => setCustomWindowSize(e.target.value)}
+                      className="rounded-2xl"
+                    />
+                  </div>
                 </div>
-                <Switch checked={predictionEnabled} onCheckedChange={setPredictionEnabled} />
               </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <p className="font-medium text-slate-900">Predict Future</p>
+                <p className="mt-1 text-xs text-slate-500">POST /workspace/jobs/predict-future</p>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2 sm:col-span-3">
+                    <Label>Model for Future Prediction</Label>
+                    <Select value={predictFutureModelId} onValueChange={setPredictFutureModelId}>
+                      <SelectTrigger className="rounded-2xl"><SelectValue placeholder="Select predict_future model" /></SelectTrigger>
+                      <SelectContent>
+                        {modelsByTaskType.predict_future.map((model) => (
+                          <SelectItem key={getModelId(model)} value={getModelId(model)}>
+                            {getModelDisplayName(model)} ({model?.version || "no version"})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Prediction window</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={predictionWindow}
+                      onChange={(e) => setPredictionWindow(e.target.value)}
+                      className="rounded-2xl"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {analysisRunError ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {analysisRunError}
+                </div>
+              ) : null}
+
+              {analysisRunSuccess ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  {analysisRunSuccess}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1453,34 +1751,42 @@ export default function MainWorkspace({
             <Card className="rounded-3xl">
               <CardHeader>
                 <CardTitle>Analysis Summary</CardTitle>
-                <CardDescription>Live preview and configuration summary based on uploaded data.</CardDescription>
+                <CardDescription>Backend job payload summary from the selected dataset and models.</CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-4">
-                <SimpleSignalChart
-                  points={analysisSummary?.points || []}
-                  spikes={analysisSummary?.spikes || []}
-                  thresholdLine={analysisSummary?.thresholdLine ?? null}
-                  xLabel={analysisSummary?.xColumn || "X axis"}
-                  yLabel={analysisSummary?.yColumn || "Y axis"}
-                />
-
+              <CardContent>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <InfoTile label="Dataset" value={datasetName || "—"} />
-                  <InfoTile label="Sheet" value={selectedSheet || "—"} />
-                  <InfoTile label="Signal" value={analysisSummary?.yColumn || "—"} />
-                  <InfoTile label="Detrend" value={normalization ? "On" : "Off"} />
-                  <InfoTile label="Model" value={formatModelName(classifier)} />
-                  <InfoTile label="Window size" value={`${windowSize} samples`} />
-                  <InfoTile label="Detected spikes" value={analysisSummary?.spikeCount || 0} />
-                  <InfoTile label="Signal range" value={resultMetrics?.range ?? "No data"} />
-                  <InfoTile label="Mean" value={resultMetrics?.mean ?? "No data"} />
+                  <InfoTile label="Dataset" value={getDatasetDisplayName(selectedBackendDataset) || "—"} />
+                  <InfoTile label="Dataset ID" value={getDatasetId(selectedBackendDataset) || "—"} />
+                  <InfoTile label="Rows previewed" value={datasetPreviewRows.length || 0} />
+                  <InfoTile label="Time column" value="Time" />
+                  <InfoTile label="Voltage column" value="Voltage" />
+                  <InfoTile label="Source" value="supabase" />
+                  <InfoTile label="Detect model" value={getModelDisplayName(getSelectedModel("detect_patterns", detectPatternModelId))} />
+                  <InfoTile label="Explore model" value={getModelDisplayName(getSelectedModel("custom_exploration", customExplorationModelId))} />
+                  <InfoTile label="Predict model" value={getModelDisplayName(getSelectedModel("predict_future", predictFutureModelId))} />
+                  <InfoTile label="Detect window" value={detectWindowSize} />
+                  <InfoTile label="Min interval" value={detectMinInterval} />
+                  <InfoTile label="Prediction window" value={predictionWindow} />
                 </div>
               </CardContent>
             </Card>
 
             <div className="flex justify-end gap-3">
-              <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700" disabled={!hasUploadedData} onClick={handleRunAnalysis}>Run analysis</Button>
+              <Button
+                className="rounded-2xl bg-emerald-600 hover:bg-emerald-700"
+                disabled={
+                  analysisRunLoading ||
+                  !selectedBackendDataset ||
+                  !detectPatternModelId ||
+                  !customExplorationModelId ||
+                  !predictFutureModelId
+                }
+                onClick={handleRunAnalysis}
+              >
+                {analysisRunLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {analysisRunLoading ? "Submitting jobs..." : "Run Analysis"}
+              </Button>
             </div>
           </div>
         </div>
