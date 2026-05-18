@@ -28,7 +28,10 @@ def call_model(model: Any, input_frame: pd.DataFrame, config: Dict[str, Any]) ->
     if hasattr(model, "run_inference"):
         return model.run_inference(input_frame, config)
     if hasattr(model, "predict"):
-        return model.predict(input_frame)
+        try:
+            return model.predict(input_frame, config)
+        except TypeError:
+            return model.predict(input_frame)
     if callable(model):
         try:
             return model(input_frame, config)

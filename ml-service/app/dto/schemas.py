@@ -9,7 +9,8 @@ class DatasetColumns(BaseModel):
 
 class DatasetRef(BaseModel):
     source: str = "supabase"
-    file_url: HttpUrl
+    dataset_id: Optional[str] = None
+    file_url: Optional[HttpUrl] = None
     storage_path: Optional[str] = None
     columns: DatasetColumns = Field(default_factory=DatasetColumns)
 
@@ -21,39 +22,45 @@ class PreprocessingConfig(BaseModel):
 
 
 class ModelRef(BaseModel):
-    name: str
-    type: str
+    model_id: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
     selection: Optional[str] = None
     version: Optional[str] = None
-    file_url: HttpUrl
+    file_url: Optional[HttpUrl] = None
     storage_path: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("type")
+    @field_validator("type", mode="before")
     @classmethod
-    def normalize_type(cls, value: str) -> str:
+    def normalize_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return value.lower().lstrip(".")
 
 
 class BaseMlRequest(BaseModel):
     job_id: str
+    job: Optional[str] = None
     dataset: DatasetRef
     preprocessing: PreprocessingConfig = Field(default_factory=PreprocessingConfig)
-    config: Dict[str, Any] = Field(default_factory=dict)
     model: ModelRef
+    # Generic config fallback — prefer named config fields below
+    config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class DetectPatternsRequest(BaseMlRequest):
-    pass
+    detection_config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class CustomExplorationRequest(BaseMlRequest):
+    analysis_config: Dict[str, Any] = Field(default_factory=dict)
     previous_run_id: Optional[str] = None
     previous_result: Optional[Dict[str, Any]] = None
 
 
 class PredictFutureRequest(BaseMlRequest):
-    pass
+    prediction_config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PatternPoint(BaseModel):
