@@ -24,13 +24,14 @@ export class WorkspaceService {
     if (!dataset) throw new Error('Dataset not found');
 
     const job = await this.jobService.createJob({ type, dataset_id: datasetId, request_payload: payload });
+    console.log("ADDING JOB TO QUEUE:", job.job_id);
     await workspaceQueue.add(type, { job_id: job.job_id, type }, {
       attempts: 2,
       backoff: { type: 'exponential', delay: 1500 },
       removeOnComplete: true,
       removeOnFail: false
     });
-
+    console.log("ADDED JOB TO QUEUE:", job.job_id);
     return job;
   }
 }

@@ -22,6 +22,7 @@ async function processWorkspaceJob(data: { job_id: string; type: string }) {
   else if (data.type === 'predict_future') output = await predictFutureProcessor(data.job_id, jobDoc.request_payload);
   else throw new Error(`Unsupported job type: ${data.type}`);
 
+
   const result = await resultService.createResult({
     job_id: data.job_id,
     type: data.type,

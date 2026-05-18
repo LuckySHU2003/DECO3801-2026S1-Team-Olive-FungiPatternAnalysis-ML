@@ -21,6 +21,7 @@ const preprocessingSchema = z.object({
 });
 
 const modelSchema = z.object({
+  model_id: z.string().min(1),
   name: z.string().min(1),
   selection: modelSelectionSchema.optional(),
   type: modelTypeSchema,
