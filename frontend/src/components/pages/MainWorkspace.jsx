@@ -1211,8 +1211,9 @@ export default function MainWorkspace({
     const response = await fetch(`${API_URL}/results/${resultId}`);
     const resultPayload = await readJsonResponse(response);
 
-    if (!response.ok) {
-      throw new Error(resultPayload?.message || resultPayload?.error || `Failed to fetch result ${resultId}.`);
+    if (!response.ok && response.status === 404) {
+      response = await fetch(`${API_URL}/results/${resultId}`);
+      resultPayload = await readJsonResponse(response);
     }
 
     return resultPayload;
@@ -1373,6 +1374,11 @@ export default function MainWorkspace({
       const completedAnalysis = {
         dataset: selectedBackendDataset,
         config,
+        inputData: graphPoints.map((point) => ({
+          time: point.x,
+          voltage: point.y,
+          index: point.index,
+        })),
         jobs: {
           detect_patterns: completedJobs[0],
           custom_exploration: completedJobs[1],
