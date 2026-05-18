@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import * as Slider from "@radix-ui/react-slider";
 import { motion } from "framer-motion";
 import {
   UploadCloud,
@@ -489,14 +490,20 @@ export default function MainWorkspace({
   {/* Set analysis configuration state and effects */ }
   const [detectPatternModelId, setDetectPatternModelId] = useState("");
   const [customExplorationModelId, setCustomExplorationModelId] = useState("");
+  const [customTimeRange, setCustomTimeRange] = useState(null);
   const [predictFutureModelId, setPredictFutureModelId] = useState("");
-  const [detectWindowSize, setDetectWindowSize] = useState("20");
-  const [detectMinInterval, setDetectMinInterval] = useState("5");
-  const [customWindowSize, setCustomWindowSize] = useState("20");
+  const [analysisWindowSize, setAnalysisWindowSize] = useState("20");
+  const [analysisMinInterval, setAnalysisMinInterval] = useState("5");
   const [predictionWindow, setPredictionWindow] = useState("20");
   const [analysisRunLoading, setAnalysisRunLoading] = useState(false);
   const [analysisRunError, setAnalysisRunError] = useState("");
   const [analysisRunSuccess, setAnalysisRunSuccess] = useState("");
+  const [analysisValidationErrors, setAnalysisValidationErrors] = useState({});
+  const [analysisJobRows, setAnalysisJobRows] = useState([
+    { key: "detect_patterns", label: "Detect Patterns", status: "idle", error: "" },
+    { key: "custom_exploration", label: "Custom Exploration", status: "idle", error: "" },
+    { key: "predict_future", label: "Predict Future", status: "idle", error: "" },
+  ]);
 
   {/* Backend API setup & helpers */ }
   const normalizeApiList = (payload, key) => {
@@ -707,6 +714,15 @@ export default function MainWorkspace({
   useEffect(() => {
     if (!xRangeLimit) return;
     setXRange([xRangeLimit.min, xRangeLimit.max]);
+  }, [xRangeLimit]);
+
+  useEffect(() => {
+    if (!xRangeLimit) return;
+
+    setCustomTimeRange((current) => {
+      if (Array.isArray(current) && current.length === 2) return current;
+      return [Number(xRangeLimit.min), Number(xRangeLimit.max)];
+    });
   }, [xRangeLimit]);
 
   useEffect(() => {
@@ -1005,41 +1021,201 @@ export default function MainWorkspace({
     }
   };
 
-  const safeInteger = (value, fallback) => {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  const parseIntegerField = (value) => {
+    if (value === "" || value === null || value === undefined) return null;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) return null;
+    return parsed;
   };
 
-  {/* Build Payload Helpers */ }
-  const createRequestId = (prefix) => {
-    const randomPart = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    return `${prefix}-${randomPart}`;
+  const updateAnalysisJobRow = (key, patch) => {
+    setAnalysisJobRows((rows) =>
+      rows.map((row) => (row.key === key ? { ...row, ...patch } : row))
+    );
   };
 
-  const buildBaseDatasetPayload = () => ({
-    dataset_id: getDatasetId(selectedBackendDataset),
-    source: selectedBackendDataset?.source || "supabase",
-    columns: {
-      time: xColumn || "Time",
-      voltage: yColumn || "Voltage",
-    },
+  const resetAnalysisJobRows = () => {
+    setAnalysisJobRows([
+      { key: "detect_patterns", label: "Detect Patterns", status: "queued", error: "" },
+      { key: "custom_exploration", label: "Custom Exploration", status: "queued", error: "" },
+      { key: "predict_future", label: "Predict Future", status: "queued", error: "" },
+    ]);
+  };
+
+  const getJobId = (job) => {
+    return job?.job_id || job?.jobId || job?.id || job?.job?._id || job?.job?.id || job?.job?.job_id;
+  };
+
+  const getResultId = (job) => {
+    return job?.result_id || job?.resultId || job?.result?._id || job?.result?.id || job?.result?.result_id;
+  };
+
+  const readJsonResponse = async (response) => {
+    const text = await response.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text };
+    }
+  };
+
+  const buildModelPayload = (model) => ({
+    model_id: getModelId(model),
+    name: model?.name || model?.model_name || "",
+    type: model?.type || model?.model_type || "",
+    version: model?.version || "",
   });
 
-  const buildDetectionConfig = ({ modelName, windowSizeValue, minIntervalValue, includePredictionWindow = false }) => {
-    const config = {
-      model_name: modelName,
-      pattern_types: ["spike"],
-      mode: "raw",
-      null_filter: true,
-      window_size: safeInteger(windowSizeValue, 128),
-      min_interval: safeInteger(minIntervalValue, 5),
-    };
+  const getDatasetColumnsPayload = () => ({
+    time: "Time",
+    voltage: "Voltage",
+  });
 
-    if (includePredictionWindow) {
-      config.prediction_window = safeInteger(predictionWindow, 20);
+  const getCurrentTimeRange = () => {
+    if (Array.isArray(customTimeRange) && customTimeRange.length === 2) {
+      return {
+        start: Number(customTimeRange[0]),
+        end: Number(customTimeRange[1]),
+      };
     }
 
-    return config;
+    if (xRangeLimit) {
+      return {
+        start: Number(xRangeLimit.min),
+        end: Number(xRangeLimit.max),
+      };
+    }
+
+    return { start: 0, end: 100 };
+  };
+
+  const validateAnalysisConfig = ({ datasetId, detectModel, explorationModel, predictionModel }) => {
+    const errors = {};
+
+    const windowSizeValue = parseIntegerField(analysisWindowSize);
+    const minIntervalValue = parseIntegerField(analysisMinInterval);
+    const predictionWindowValue = parseIntegerField(predictionWindow);
+
+    if (!datasetId) {
+      errors.dataset = "Select a backend dataset before running analysis.";
+    }
+
+    if (!detectModel) {
+      errors.detectModel = "Select a valid detect_patterns model.";
+    }
+
+    if (!explorationModel) {
+      errors.explorationModel = "Select a valid custom_exploration model.";
+    }
+
+    if (!predictionModel) {
+      errors.predictionModel = "Select a valid predict_future model.";
+    }
+
+    if (windowSizeValue === null || windowSizeValue <= 0) {
+      errors.window_size = "window_size must be a positive integer.";
+    }
+
+    if (minIntervalValue === null || minIntervalValue < 0) {
+      errors.min_interval = "min_interval must be a non-negative integer.";
+    }
+
+    if (predictionWindowValue === null || predictionWindowValue <= 0) {
+      errors.prediction_window = "prediction_window must be a positive integer.";
+    }
+
+    return {
+      errors,
+      config: {
+        window_size: windowSizeValue,
+        min_interval: minIntervalValue,
+        prediction_window: predictionWindowValue,
+      },
+    };
+  };
+
+  const submitWorkspaceJob = async ({ endpoint, payload, key }) => {
+    updateAnalysisJobRow(key, { status: "submitted", error: "" });
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const job = await readJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(job?.message || job?.error || job?.raw || `Job request failed (${response.status})`);
+    }
+
+    console.log("Job created", job);
+    return job;
+  };
+
+  const pollWorkspaceJob = async ({ job, key }) => {
+    const jobId = getJobId(job);
+
+    if (!jobId) {
+      throw new Error(`Missing job_id for ${key}.`);
+    }
+
+    while (true) {
+      const response = await fetch(`${API_URL}/jobs/${jobId}`);
+      const jobStatus = await readJsonResponse(response);
+
+      if (!response.ok) {
+        throw new Error(jobStatus?.message || jobStatus?.error || `Failed to poll job ${jobId}.`);
+      }
+
+      console.log("Job poll status", jobStatus);
+
+      const status = String(jobStatus?.status || jobStatus?.job?.status || "").toLowerCase();
+
+      if (status === "completed" || status === "complete" || status === "succeeded" || status === "success") {
+        updateAnalysisJobRow(key, { status: "completed", error: "" });
+        return jobStatus;
+      }
+
+      if (status === "failed" || status === "error") {
+        const message =
+          jobStatus?.error ||
+          jobStatus?.message ||
+          jobStatus?.job?.error ||
+          `${key} failed.`;
+
+        updateAnalysisJobRow(key, { status: "failed", error: message });
+        throw new Error(message);
+      }
+
+      updateAnalysisJobRow(key, { status: status || "processing", error: "" });
+
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  };
+
+  const fetchResultForJob = async (jobStatus) => {
+    const inlineResult = jobStatus?.result || jobStatus?.data?.result;
+
+    if (inlineResult) {
+      return inlineResult;
+    }
+
+    const resultId = getResultId(jobStatus);
+
+    if (!resultId) {
+      return jobStatus;
+    }
+
+    const response = await fetch(`${API_URL}/results/${resultId}`);
+    const resultPayload = await readJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(resultPayload?.message || resultPayload?.error || `Failed to fetch result ${resultId}.`);
+    }
+
+    return resultPayload;
   };
 
   {/* Separate Payload Construction */ }
@@ -1053,35 +1229,6 @@ export default function MainWorkspace({
 
   const getSelectedModel = (taskType, modelId) => {
     return modelsByTaskType[taskType]?.find((model) => getModelId(model) === modelId) || null;
-  };
-
-  const buildModelPayload = (model) => ({
-    model_id: getModelId(model),
-    name: model?.name || "",
-    type: model?.type || "",
-    version: model?.version || "",
-  });
-
-  const getDatasetColumnsPayload = () => ({
-    time: "Time",
-    voltage: "Voltage",
-  });
-
-  const getCurrentTimeRange = () => {
-    const fallbackStart = 0;
-    const fallbackEnd = datasetPreviewRows.length || 100;
-
-    if (Array.isArray(xRange) && xRange.length === 2) {
-      return {
-        start: Number(xRange[0]) || fallbackStart,
-        end: Number(xRange[1]) || fallbackEnd,
-      };
-    }
-
-    return {
-      start: fallbackStart,
-      end: fallbackEnd,
-    };
   };
 
   useEffect(() => {
@@ -1117,8 +1264,18 @@ export default function MainWorkspace({
     const explorationModel = getSelectedModel("custom_exploration", customExplorationModelId);
     const predictionModel = getSelectedModel("predict_future", predictFutureModelId);
 
-    if (!detectModel || !explorationModel || !predictionModel) {
-      setAnalysisRunError("Select one valid model for each analysis job.");
+    const { errors, config } = validateAnalysisConfig({
+      datasetId,
+      detectModel,
+      explorationModel,
+      predictionModel,
+    });
+
+    console.log("Run Analysis config", config);
+
+    if (Object.keys(errors).length > 0) {
+      setAnalysisValidationErrors(errors);
+      setAnalysisRunError("Fix the analysis configuration before running jobs.");
       return;
     }
 
@@ -1134,78 +1291,107 @@ export default function MainWorkspace({
       missing_value_strategy: "interpolate",
     };
 
+    const detectPayload = {
+      job: "detect_patterns",
+      dataset: baseDataset,
+      preprocessing,
+      detection_config: {
+        pattern_types: ["spike"],
+        threshold: 0.5,
+        window_size: config.window_size,
+        min_interval: config.min_interval,
+      },
+      model: buildModelPayload(detectModel),
+    };
+
+    const customPayload = {
+      job: "custom_exploration",
+      dataset: baseDataset,
+      preprocessing,
+      analysis_config: {
+        threshold: 0.5,
+        window_size: config.window_size,
+        time_range: getCurrentTimeRange(),
+      },
+      model: buildModelPayload(explorationModel),
+      previous_run_id: null,
+    };
+
+    const predictPayload = {
+      job: "predict_future",
+      dataset: baseDataset,
+      preprocessing,
+      prediction_config: {
+        prediction_window: config.prediction_window,
+      },
+      model: buildModelPayload(predictionModel),
+    };
+
+    console.log("Detect payload", detectPayload);
+    console.log("Custom payload", customPayload);
+    console.log("Predict payload", predictPayload);
+
     const jobs = [
       {
+        key: "detect_patterns",
         endpoint: `${API_URL}/workspace/jobs/detect-patterns`,
-        payload: {
-          job: "detect_patterns",
-          dataset: baseDataset,
-          preprocessing,
-          detection_config: {
-            pattern_types: ["spike", "oscillation"],
-            threshold: 0.5,
-            window_size: Number.parseInt(detectWindowSize, 10),
-            min_interval: Number.parseInt(detectMinInterval, 10),
-          },
-          model: buildModelPayload(detectModel),
-        },
+        payload: detectPayload,
       },
       {
+        key: "custom_exploration",
         endpoint: `${API_URL}/workspace/jobs/custom-exploration`,
-        payload: {
-          job: "custom_exploration",
-          dataset: baseDataset,
-          preprocessing,
-          analysis_config: {
-            threshold: 0.5,
-            window_size: Number.parseInt(customWindowSize, 10),
-            time_range: getCurrentTimeRange(),
-          },
-          model: buildModelPayload(explorationModel),
-          previous_run_id: null,
-        },
+        payload: customPayload,
       },
       {
+        key: "predict_future",
         endpoint: `${API_URL}/workspace/jobs/predict-future`,
-        payload: {
-          job: "predict_future",
-          dataset: baseDataset,
-          preprocessing,
-          prediction_config: {
-            prediction_window: Number.parseInt(predictionWindow, 10),
-          },
-          model: buildModelPayload(predictionModel),
-        },
+        payload: predictPayload,
       },
     ];
 
     setAnalysisRunLoading(true);
+    resetAnalysisJobRows();
 
     try {
-      const responses = [];
+      const createdJobs = await Promise.all(
+        jobs.map((jobConfig) => submitWorkspaceJob(jobConfig))
+      );
 
-      for (const { endpoint, payload } of jobs) {
+      const completedJobs = await Promise.all(
+        createdJobs.map((job, index) =>
+          pollWorkspaceJob({
+            job,
+            key: jobs[index].key,
+          })
+        )
+      );
 
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const fetchedResults = await Promise.all(
+        completedJobs.map((jobStatus) => fetchResultForJob(jobStatus))
+      );
 
-        const responseText = await response.text();
+      const completedAnalysis = {
+        dataset: selectedBackendDataset,
+        config,
+        jobs: {
+          detect_patterns: completedJobs[0],
+          custom_exploration: completedJobs[1],
+          predict_future: completedJobs[2],
+        },
+        results: {
+          detect_patterns: fetchedResults[0],
+          custom_exploration: fetchedResults[1],
+          predict_future: fetchedResults[2],
+        },
+      };
 
-        if (!response.ok) {
-          throw new Error(responseText || `Job request failed (${response.status})`);
-        }
+      startAnalysis?.(completedAnalysis);
 
-        responses.push(responseText ? JSON.parse(responseText) : {});
-      }
-
-      setAnalysisRunSuccess(`Submitted ${responses.length} analysis jobs.`);
+      setAnalysisRunSuccess("All analysis jobs completed successfully.");
       setPage("results");
     } catch (error) {
       console.error("Run analysis failed:", error);
-      setAnalysisRunError(error?.message || "Failed to submit analysis jobs.");
+      setAnalysisRunError(error?.message || "Failed to complete analysis jobs.");
     } finally {
       setAnalysisRunLoading(false);
     }
@@ -1220,6 +1406,49 @@ export default function MainWorkspace({
       exit={{ opacity: 0, y: -8 }}
       className="space-y-8"
     >
+      {analysisRunLoading ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+              <div>
+                <p className="font-semibold text-slate-900">Running analysis jobs</p>
+                <p className="text-sm text-slate-500">
+                  Waiting for all backend jobs to complete before opening Analysis View.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {analysisJobRows.map((row) => (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{row.label}</p>
+                    {row.error ? <p className="mt-1 text-xs text-red-600">{row.error}</p> : null}
+                  </div>
+
+                  <span
+                    className={[
+                      "rounded-full px-3 py-1 text-xs font-medium",
+                      row.status === "completed"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : row.status === "failed"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-slate-200 text-slate-700",
+                    ].join(" ")}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      
       {/* Summary Dashboard */}
       <section>
         <div className="mb-4">
@@ -1647,25 +1876,31 @@ export default function MainWorkspace({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Window size</Label>
+                    <Label>window_size</Label>
                     <Input
                       type="number"
                       min="1"
-                      value={detectWindowSize}
-                      onChange={(e) => setDetectWindowSize(e.target.value)}
+                      value={analysisWindowSize}
+                      onChange={(e) => setAnalysisWindowSize(e.target.value)}
                       className="rounded-2xl"
                     />
+                    {analysisValidationErrors.window_size ? (
+                      <p className="text-xs text-red-600">{analysisValidationErrors.window_size}</p>
+                    ) : null}
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Min interval</Label>
+                    <Label>min_interval</Label>
                     <Input
                       type="number"
-                      min="1"
-                      value={detectMinInterval}
-                      onChange={(e) => setDetectMinInterval(e.target.value)}
+                      min="0"
+                      value={analysisMinInterval}
+                      onChange={(e) => setAnalysisMinInterval(e.target.value)}
                       className="rounded-2xl"
                     />
+                    {analysisValidationErrors.min_interval ? (
+                      <p className="text-xs text-red-600">{analysisValidationErrors.min_interval}</p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1689,16 +1924,37 @@ export default function MainWorkspace({
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Window size</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={customWindowSize}
-                      onChange={(e) => setCustomWindowSize(e.target.value)}
-                      className="rounded-2xl"
-                    />
+                  <div className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500 sm:col-span-3">
+                    Uses shared window_size and selected Current Time Range. Hidden defaults: mode=raw, threshold=0.5.
                   </div>
+
+                  {xRangeLimit && customTimeRange ? (
+                    <div className="space-y-3 sm:col-span-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>Current Time Range</Label>
+                        <span className="text-xs text-slate-500">
+                          {customTimeRange[0]} to {customTimeRange[1]}
+                        </span>
+                      </div>
+
+                      <Slider.Root
+                        className="relative flex h-6 w-full touch-none select-none items-center"
+                        min={Number(xRangeLimit.min)}
+                        max={Number(xRangeLimit.max)}
+                        step={1}
+                        value={customTimeRange}
+                        onValueChange={setCustomTimeRange}
+                        minStepsBetweenThumbs={1}
+                      >
+                        <Slider.Track className="relative h-2 grow rounded-full bg-slate-200">
+                          <Slider.Range className="absolute h-full rounded-full bg-emerald-500" />
+                        </Slider.Track>
+
+                        <Slider.Thumb className="block h-5 w-5 rounded-full border border-emerald-600 bg-white shadow" />
+                        <Slider.Thumb className="block h-5 w-5 rounded-full border border-emerald-600 bg-white shadow" />
+                      </Slider.Root>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1722,7 +1978,7 @@ export default function MainWorkspace({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Prediction window</Label>
+                    <Label>prediction_window</Label>
                     <Input
                       type="number"
                       min="1"
@@ -1730,9 +1986,20 @@ export default function MainWorkspace({
                       onChange={(e) => setPredictionWindow(e.target.value)}
                       className="rounded-2xl"
                     />
+                    {analysisValidationErrors.prediction_window ? (
+                      <p className="text-xs text-red-600">{analysisValidationErrors.prediction_window}</p>
+                    ) : null}
                   </div>
                 </div>
               </div>
+
+              {Object.values(analysisValidationErrors).length > 0 ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {Object.values(analysisValidationErrors).map((message) => (
+                    <p key={message}>{message}</p>
+                  ))}
+                </div>
+              ) : null}
 
               {analysisRunError ? (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1766,9 +2033,10 @@ export default function MainWorkspace({
                   <InfoTile label="Detect model" value={getModelDisplayName(getSelectedModel("detect_patterns", detectPatternModelId))} />
                   <InfoTile label="Explore model" value={getModelDisplayName(getSelectedModel("custom_exploration", customExplorationModelId))} />
                   <InfoTile label="Predict model" value={getModelDisplayName(getSelectedModel("predict_future", predictFutureModelId))} />
-                  <InfoTile label="Detect window" value={detectWindowSize} />
-                  <InfoTile label="Min interval" value={detectMinInterval} />
-                  <InfoTile label="Prediction window" value={predictionWindow} />
+                  <InfoTile label="window_size" value={analysisWindowSize} />
+                  <InfoTile label="min_interval" value={analysisMinInterval} />
+                  <InfoTile label="prediction_window" value={predictionWindow} />
+                  <InfoTile label="Hidden defaults" value="mode=raw, spike only, null_filter=true" />
                 </div>
               </CardContent>
             </Card>
@@ -1781,12 +2049,15 @@ export default function MainWorkspace({
                   !selectedBackendDataset ||
                   !detectPatternModelId ||
                   !customExplorationModelId ||
-                  !predictFutureModelId
+                  !predictFutureModelId ||
+                  analysisWindowSize === "" ||
+                  analysisMinInterval === "" ||
+                  predictionWindow === ""
                 }
                 onClick={handleRunAnalysis}
               >
                 {analysisRunLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {analysisRunLoading ? "Submitting jobs..." : "Run Analysis"}
+                {analysisRunLoading ? "Running jobs..." : "Run Analysis"}
               </Button>
             </div>
           </div>
