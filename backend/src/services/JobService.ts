@@ -36,4 +36,13 @@ export class JobService {
     if (!doc) throw new Error('Job not found');
     return toJobResponse(doc);
   }
+
+  async getJobs() {
+    const jobs = await JobModel.find()
+      .sort({ created_at: -1 })
+      .limit(100)
+      .lean();
+
+    return { jobs };
+  }
 }

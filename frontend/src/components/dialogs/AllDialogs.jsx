@@ -338,13 +338,9 @@ export default function AllDialogs({
             <DialogDescription>Your workflow has finished successfully.</DialogDescription>
           </DialogHeader>
           <div className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900">
-            {spikeCount} spikes detected · {classifierLabel} classification complete
-            {predictionEnabled ? ` · ${sequenceLabel} forecast generated` : ""}
+            Your data has been processed and the results are ready to view. You can explore the analysis summary, model performance metrics, and detailed predictions in the results page.
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRunCompleteOpen(false)}>
-              Stay here
-            </Button>
             <Button
               className="bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
@@ -377,80 +373,6 @@ export default function AllDialogs({
             >
               Regenerate
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Retrain Model */}
-      <Dialog open={retrainOpen} onOpenChange={setRetrainOpen}>
-        <DialogContent className="rounded-3xl">
-          <DialogHeader>
-            <DialogTitle>Retrain model</DialogTitle>
-            <DialogDescription>
-              Start a new training run using the current uploaded dataset and selected setup.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="space-y-2">
-              <Label>Dataset</Label>
-              <Input value={datasetName || ""} readOnly />
-            </div>
-            <div className="space-y-2">
-              <Label>Epochs</Label>
-              <Input defaultValue="25" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRetrainOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => {
-                setRetrainOpen(false);
-                startAnalysis();
-              }}
-            >
-              Start retraining
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Compare Runs */}
-      <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
-        <DialogContent className="max-w-4xl rounded-3xl">
-          <DialogHeader>
-            <DialogTitle>Compare experiment runs</DialogTitle>
-            <DialogDescription>
-              Side-by-side result summary for reproducibility checking.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-3 md:grid-cols-2">
-            <Card className="rounded-2xl">
-              <CardContent className="space-y-2 p-4 text-sm">
-                <p className="font-medium">Current run</p>
-                <p>{datasetName || "No dataset loaded"}</p>
-                <p>{selectedSheet || "Default sheet"}</p>
-                <p>{classifierLabel}{predictionEnabled ? ` + ${sequenceLabel}` : ""}</p>
-                <p>Spike count: {spikeCount}</p>
-                <p>Samples: {sampleCount}</p>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-2xl">
-              <CardContent className="space-y-2 p-4 text-sm">
-                <p className="font-medium">Comparison snapshot</p>
-                <p>Mean: {resultMetrics?.mean ?? "No data"}</p>
-                <p>Range: {resultMetrics?.range ?? "No data"}</p>
-                <p>Frequency: {resultMetrics?.frequency ?? "No data"}</p>
-                <p>RMSE: {resultMetrics?.rmse ?? "No data"}</p>
-                <p>Detected columns: {detectedColumns}</p>
-              </CardContent>
-            </Card>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setCompareOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
