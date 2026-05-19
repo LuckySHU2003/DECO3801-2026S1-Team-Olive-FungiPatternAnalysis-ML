@@ -13,35 +13,27 @@ function inferModelInput(requestPayload: any) {
 }
 
 export async function prepareMlPayload(jobId: string, requestPayload: any) {
-  const dataset = await DatasetModel.findById(requestPayload.dataset.dataset_id);
-  if (!dataset) throw new Error('Dataset not found');
-  if (!dataset.file_url && !dataset.storage_path) throw new Error('Dataset has no file_url or storage_path');
+  const datasetId = requestPayload.dataset?.dataset_id;
+  if (!datasetId) throw new Error('dataset.dataset_id is required');
 
-  const storageUrlService = new StorageUrlService();
-  const datasetFileUrl = dataset.storage_path
-    ? await storageUrlService.createSignedUrl(dataset.bucket ?? env.SUPABASE_DATASETS_BUCKET, dataset.storage_path)
-    : dataset.file_url;
+  const modelId = requestPayload.model?.model_id;
+  if (!modelId) throw new Error('model.model_id is required');
 
-  const model = await new ModelRegistryService().resolveModel(inferModelInput(requestPayload));
-  const modelFileUrl = model.storage_path
-    ? await storageUrlService.createSignedUrl(model.bucket ?? env.SUPABASE_MODELS_BUCKET, model.storage_path)
-    : model.file_url;
-
-  if (!modelFileUrl) throw new Error(`Resolved model ${model.name} has no usable file URL`);
+  if (!requestPayload.job) throw new Error('job type field is required');
 
   return {
+    ...requestPayload,
     job_id: jobId,
     dataset: {
-      source: 'supabase',
-      file_url: datasetFileUrl,
-      storage_path: dataset.storage_path,
-      columns: requestPayload.dataset.columns ?? { time: 'Time', voltage: 'Voltage' }
+      ...requestPayload.dataset,
+      source: requestPayload.dataset?.source ?? 'supabase',
+      columns: requestPayload.dataset?.columns ?? { time: 'Time', voltage: 'Voltage' }
     },
-    preprocessing: requestPayload.preprocessing,
-    config: requestPayload.detection_config ?? requestPayload.analysis_config ?? requestPayload.prediction_config,
-    model: {
-      ...model,
-      file_url: modelFileUrl
+    preprocessing: requestPayload.preprocessing ?? {
+      mode: 'raw',
+      normalize: true,
+      missing_value_strategy: 'interpolate'
     }
   };
 }
+

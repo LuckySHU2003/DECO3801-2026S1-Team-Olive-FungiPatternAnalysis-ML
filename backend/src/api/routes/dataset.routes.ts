@@ -18,4 +18,21 @@ export async function datasetRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/datasets/:id', async (request) => {
     return service.getDatasetById(request.params.id);
   });
+
+  app.get<{ Params: { id: string } }>('/datasets/:id/preview', async (request) => {
+    return service.getDatasetPreviewById(request.params.id);
+  });
+
+  app.delete<{ Params: { id: string } }>('/datasets/:id', async (request, reply) => {
+    const deleted = await service.deleteDatasetById(request.params.id);
+
+    if (!deleted) {
+      return reply.code(404).send({ error: 'Dataset not found' });
+    }
+
+    return reply.send({
+      message: 'Dataset deleted successfully',
+      dataset_id: request.params.id,
+    });
+  });
 }

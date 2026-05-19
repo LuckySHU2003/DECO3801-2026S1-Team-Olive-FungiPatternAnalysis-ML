@@ -4,7 +4,6 @@ import { AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 
 import AppShell from "@/components/layout/AppShell";
-import Home from "@/Home";
 import AllDialogs from "@/components/dialogs/AllDialogs";
 
 // Page components
@@ -274,6 +273,8 @@ export default function App() {
   const [uploadedDatasets, setUploadedDatasets] = useState([]);
   const [analysisRuns, setAnalysisRuns] = useState([]);
 
+  const [completedAnalysis, setCompletedAnalysis] = useState(null);
+
   const buildSignalDataFromRows = (rows, headerList) => {
     const firstNumericHeader = headerList.find((header) =>
       rows.some(
@@ -514,124 +515,36 @@ export default function App() {
     [analysisSummary, signalData.length, predictionData]
   );
 
-  const startAnalysis = () => {
-    const steps = [
-      {
-        progress: 18,
-        label: "Dataset loaded",
-        log: `Loaded ${datasetName || "dataset"}${
-          selectedSheet ? ` from sheet "${selectedSheet}"` : ""
-        }.`,
-      },
-      {
-        progress: 30,
-        label: "Preprocessing",
-        log: `Applied ${filterType} preprocessing to ${
-          analysisSummary.detectedSignalColumn || "signal"
-        }.`,
-      },
-      {
-        progress: 46,
-        label: "Spike detection",
-        log: `Detected ${analysisSummary.spikeCount} spikes using window size ${windowSize} and sensitivity ${threshold} σ.`,
-      },
-      {
-        progress: 63,
-        label: "Feature extraction",
-        log: `Extracted features from ${analysisSummary.points.length} processed signal points.`,
-      },
-      {
-        progress: 79,
-        label: "Model inference",
-        log: `Ran ${classifier}${
-          predictionEnabled ? ` with ${sequenceModel} prediction enabled` : ""
-        }.`,
-      },
+  const startAnalysis = (completedAnalysisPayload = null) => {
+    if (!completedAnalysisPayload?.results) {
+      console.error("startAnalysis expected completed backend analysis results.");
+      return;
+    }
+
+    setCompletedAnalysis(completedAnalysisPayload);
+    setAnalysisCompleted(true);
+    setProgress(100);
+
+    setProcessingSteps([
       {
         progress: 100,
         label: "Results generated",
-        log: `Analysis complete. ${analysisSummary.spikeCount} spikes found in the current processed signal.`,
+        log: "Backend analysis completed and results were loaded.",
       },
-    ];
+    ]);
 
-    setProcessingSteps(steps);
-    setProcessingLogs([]);
-    setProgress(0);
-    setPredictionData([]);
-    setAnalysisCompleted(false);
-    setPreviewPredictionSummary(null);
+    setProcessingLogs([
+      {
+        id: `backend-complete-${Date.now()}`,
+        text: "Backend analysis completed and results were loaded.",
+        progress: 100,
+        step: "Results generated",
+        timestamp: new Date().toLocaleTimeString(),
+      },
+    ]);
 
-    steps.forEach((step, idx) => {
-      setTimeout(() => {
-        setProgress(step.progress);
-        setProcessingLogs((prev) => [
-          ...prev,
-          {
-            id: `${idx}-${step.progress}`,
-            text: step.log,
-            progress: step.progress,
-            step: step.label,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-        ]);
-
-        if (step.progress === 100) {
-          let preds = [];
-
-          if (predictionEnabled) {
-            preds = generatePrediction(analysisSummary.points);
-            setPredictionData(preds);
-
-            setPreviewPredictionSummary({
-              nextSpike: preds.length ? preds[0].x : null,
-              trend:
-                preds.length > 1
-                  ? preds[preds.length - 1].y > preds[0].y
-                    ? "Increasing"
-                    : preds[preds.length - 1].y < preds[0].y
-                      ? "Decreasing"
-                      : "Stable"
-                  : "Stable",
-              confidence: preds.length > 0 ? "High" : "Low",
-              model:
-                classifier === "random-forest"
-                  ? "Random Forest"
-                  : classifier === "svm"
-                    ? "SVM"
-                    : classifier === "gb"
-                      ? "Gradient Boosting"
-                      : classifier,
-            });
-          } else {
-            setPredictionData([]);
-            setPreviewPredictionSummary(null);
-          }
-
-          const runRmse =
-            predictionEnabled && preds.length > 0
-              ? Math.max(stdDev(preds.map((p) => p.y)) * 0.6, 0.01)
-              : 0;
-
-          setAnalysisRuns((prev) => [
-            {
-              id: `run-${Date.now()}`,
-              datasetName,
-              selectedSheet,
-              classifier,
-              sequenceModel,
-              predictionEnabled,
-              spikeCount: analysisSummary.spikeCount,
-              rmse: runRmse,
-              completedAt: new Date().toISOString(),
-            },
-            ...prev,
-          ]);
-
-          setAnalysisCompleted(true);
-          setRunCompleteOpen(true);
-        }
-      }, (idx + 1) * 500);
-    });
+    setRunCompleteOpen(true);
+    setPage("analysis");
   };
 
   // ── Shared dialog props bundle (avoids repeating all props twice) ───────────
@@ -691,6 +604,10 @@ export default function App() {
         setPage={setPage}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
+        onLogoClick={() => {
+          setHasEntered(false);
+          setMobileOpen(false);
+        }}
       >
         <AnimatePresence mode="wait">
           {page === "workspace" && (
@@ -747,15 +664,8 @@ export default function App() {
           {page === "analysis" && (
             <AnalysisView
               key="analysis"
-              resultMetrics={resultMetrics}
-              setCompareOpen={setCompareOpen}
-              analysisSummary={analysisSummary}
-              datasetName={datasetName}
-              selectedSheet={selectedSheet}
-              classifier={classifier}
-              sequenceModel={sequenceModel}
-              predictionEnabled={predictionEnabled}
-              predictionData={predictionData}
+              completedAnalysis={completedAnalysis}
+              setRegenOpen={setRegenOpen}
             />
           )}
 
