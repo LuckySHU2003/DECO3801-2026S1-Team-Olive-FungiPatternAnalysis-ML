@@ -226,8 +226,6 @@ export default function App() {
   const [paramErrorOpen, setParamErrorOpen] = useState(false);
   const [runCompleteOpen, setRunCompleteOpen] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
-  const [retrainOpen, setRetrainOpen] = useState(false);
-  const [compareOpen, setCompareOpen] = useState(false);
   const [viewModelOpen,     setViewModelOpen]     = useState(false);
 
   // ── Analysis progress (0–100) ───────────────────────────────────────────────
@@ -569,10 +567,6 @@ export default function App() {
     setRunCompleteOpen,
     regenOpen,
     setRegenOpen,
-    retrainOpen,
-    setRetrainOpen,
-    compareOpen,
-    setCompareOpen,
     datasetName,
     setDatasetName,
     species,
@@ -672,7 +666,6 @@ export default function App() {
           {page === "models" && (
             <Models
               key="models"
-              setRetrainOpen={setRetrainOpen}
               setViewModelOpen={setViewModelOpen}
             />
           )}
@@ -680,7 +673,6 @@ export default function App() {
           {page === "history" && (
             <History
               key="history"
-              setCompareOpen={setCompareOpen}
               setPage={setPage}
             />
           )}
