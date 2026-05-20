@@ -16,7 +16,8 @@ import {
 
 
 // Reference used for this educational simulation:
-// Environmental Conditions for Fungal Growth, Mustansiriyah University.
+// Environmental Conditions for Fungal Growth, Mustan Siriyah University.
+// https://uomustansiriyah.edu.iq/media/lectures/6/6_2017_01_21!08_17_16_PM.pdf
 // Factors used: temperature, pH, oxygen/aeration, water availability, and light.
 // Species: Aspergillus flavus, Penicillium chrysogenum,Cladosporium herbarum, Stachybotrys chartarum, and Pythium oligandrum.
 
@@ -881,7 +882,7 @@ export default function FungiGarden({ setPage, setHasEntered }) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-12 px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -1016,7 +1017,7 @@ export default function FungiGarden({ setPage, setHasEntered }) {
               <BookOpen className="h-4 w-4" />
               Reference
             </div>
-            Environmental Conditions for Fungal Growth, Mustansiriyah University.
+            Environmental Conditions for Fungal Growth, Mustan Siriyah University.
             <br />
             Factors used: temperature, pH, oxygen/aeration, water availability,
             and light.
