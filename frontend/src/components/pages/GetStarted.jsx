@@ -337,10 +337,10 @@ export default function GetStarted({ onEnter }) {
             transition={{ delay: 0.15 }}
           >
             <Button
-              onClick={onEnter}
+              onClick={() => onEnter("garden")}
               className="rounded-2xl bg-emerald-600 px-5 hover:bg-emerald-700"
             >
-              Enter Workspace
+              Kid's Space
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </motion.div>
@@ -369,12 +369,13 @@ export default function GetStarted({ onEnter }) {
 
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
-                onClick={onEnter}
-                className="rounded-2xl bg-emerald-600 px-6 py-6 text-base hover:bg-emerald-700"
-              >
-                Start Exploring
-                <ArrowRight className="ml-2 h-5 w-5" />
+                  onClick={() => onEnter("workspace")}
+                  className="rounded-2xl bg-emerald-600 px-6 py-6 text-base hover:bg-emerald-700"
+                >
+                  Enter Workspace
+                  <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
+      
 
               <Button
                 variant="outline"
