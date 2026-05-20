@@ -602,6 +602,15 @@ export default function App() {
   );
 }
 
+if (page === "garden") {
+  return (
+    <FungiGarden
+      setPage={setPage}
+      setHasEntered={setHasEntered}
+    />
+  );
+}
+
 
   // ── Authenticated view ──────────────────────────────────────────────────────
   return (
@@ -692,13 +701,6 @@ export default function App() {
             />
           )}
 
-          {page === "garden" && (
-            <FungiGarden
-              key="garden"
-              setPage={setPage}
-              setHasEntered={setHasEntered}
-            />
-          )}
         </AnimatePresence>
       </AppShell>
 
