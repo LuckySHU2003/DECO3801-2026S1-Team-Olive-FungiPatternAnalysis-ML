@@ -23,7 +23,6 @@ export const navItems = [
   { id: "analysis",       label: "Analysis View",        icon: LineChart },
   { id: "models",         label: "Model Manager",        icon: FolderKanban },
   { id: "history",        label: "Experiment History",   icon: History },
-  { id: "garden",         label: "Fungi Garden",         icon: Sprout}
 ];
 
 /**
