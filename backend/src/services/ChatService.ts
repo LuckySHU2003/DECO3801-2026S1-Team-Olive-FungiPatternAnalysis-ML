@@ -92,6 +92,7 @@ export class ChatService {
 
     const combinedData = buildCombinedData(resultType, summary);
 
+    // OpenRouter proxies multiple LLM providers; using the OpenAI SDK with a custom baseURL
     const client = new OpenAI({
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: "https://openrouter.ai/api/v1",
@@ -100,6 +101,7 @@ export class ChatService {
     try {
       const completion = await client.chat.completions.create({
         model: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
+        // temperature 0.45 — low enough for factual accuracy, high enough for readable prose
         temperature: 0.45,
         max_tokens: 1000,
         messages: [
@@ -117,6 +119,7 @@ export class ChatService {
 
       return { answer };
     } catch (error: any) {
+      // 429 is surfaced as a soft user-visible message rather than re-thrown to avoid UI error states
       if (error?.status === 429) {
         return {
           answer:

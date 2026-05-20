@@ -1018,6 +1018,7 @@ export default function FungiGarden({ setPage, setHasEntered }) {
               Reference
             </div>
             Environmental Conditions for Fungal Growth, Mustan Siriyah University.
+            https://uomustansiriyah.edu.iq/media/lectures/6/6_2017_01_21!08_17_16_PM.pdf
             <br />
             Factors used: temperature, pH, oxygen/aeration, water availability,
             and light.
@@ -1034,15 +1035,6 @@ export default function FungiGarden({ setPage, setHasEntered }) {
                 <p className="mt-1 text-sm text-slate-500">
                   Drag the slider to see the difference.
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                <motion.span
-                  className="h-2 w-2 rounded-full bg-emerald-500"
-                  animate={{ opacity: [1, 0.35, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                />
-                Live preview
               </div>
             </div>
 

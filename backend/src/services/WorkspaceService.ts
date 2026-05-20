@@ -25,6 +25,8 @@ export class WorkspaceService {
 
     const job = await this.jobService.createJob({ type, dataset_id: datasetId, request_payload: payload });
     console.log("ADDING JOB TO QUEUE:", job.job_id);
+    // removeOnComplete: true prevents finished jobs from accumulating in Redis
+    // removeOnFail: false retains failed jobs so they can be inspected in the BullMQ dashboard
     await workspaceQueue.add(type, { job_id: job.job_id, type }, {
       attempts: 2,
       backoff: { type: 'exponential', delay: 1500 },

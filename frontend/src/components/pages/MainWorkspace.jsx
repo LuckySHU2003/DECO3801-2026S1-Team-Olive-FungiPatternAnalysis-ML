@@ -718,6 +718,7 @@ export default function MainWorkspace({
     setXRange([xRangeLimit.min, xRangeLimit.max]);
   }, [xRangeLimit]);
 
+  // Initialise the time-range slider to the full dataset extent the first time a dataset is loaded
   useEffect(() => {
     if (!xRangeLimit) return;
 
@@ -793,6 +794,7 @@ export default function MainWorkspace({
   };
 
   {/* Dataset validation helpers */ }
+  // Enforces strict two-column format (Time + one signal column) required by the ML service
   const validateDatasetRows = (rows) => {
     const cleanedRows = rows
       .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? "").trim()) : []))
@@ -1156,6 +1158,7 @@ export default function MainWorkspace({
     return job;
   };
 
+  // Polls the backend every 1500ms until the job reaches a terminal state (completed/failed)
   const pollWorkspaceJob = async ({ job, key }) => {
     const jobId = getJobId(job);
 
@@ -1198,6 +1201,7 @@ export default function MainWorkspace({
   };
 
   const fetchResultForJob = async (jobStatus) => {
+    // Some job responses embed the result inline; only hit /results/:id when it is absent
     const inlineResult = jobStatus?.result || jobStatus?.data?.result;
 
     if (inlineResult) {
@@ -1932,10 +1936,6 @@ export default function MainWorkspace({
                     </Select>
                   </div>
 
-                  <div className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-500 sm:col-span-3">
-                    Uses shared window_size and selected Current Time Range. Hidden defaults: mode=raw, threshold=0.5.
-                  </div>
-
                   {xRangeLimit && customTimeRange ? (
                     <div className="space-y-3 sm:col-span-3">
                       <div className="flex items-center justify-between gap-3">
@@ -2044,7 +2044,6 @@ export default function MainWorkspace({
                   <InfoTile label="window_size" value={analysisWindowSize} />
                   <InfoTile label="min_interval" value={analysisMinInterval} />
                   <InfoTile label="prediction_window" value={predictionWindow} />
-                  <InfoTile label="Hidden defaults" value="mode=raw, spike only, null_filter=true" />
                 </div>
               </CardContent>
             </Card>

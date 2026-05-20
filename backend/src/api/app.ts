@@ -14,6 +14,7 @@ export async function buildApp() {
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN });
+  // 100 MB cap — bioelectrical datasets can be large multi-channel CSVs; Fastify's default 1 MB limit caused upload failures
   await app.register(multipart, { limits: { fileSize: 100 * 1024 * 1024 } });
 
   app.get('/health', async () => ({ ok: true }));
@@ -28,6 +29,7 @@ export async function buildApp() {
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);
 
+    // ZodError maps to 400 so clients can distinguish schema validation failures from 500 server errors
     if (error instanceof ZodError) {
       return reply.code(400).send({ error: 'Validation failed', details: error.flatten() });
     }

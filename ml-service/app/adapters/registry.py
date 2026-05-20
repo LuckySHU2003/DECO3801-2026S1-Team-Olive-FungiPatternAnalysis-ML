@@ -8,6 +8,7 @@ from app.adapters.torch_adapter import TorchModelAdapter
 def select_adapter(model_type: str, model_path: Path, metadata: dict | None = None) -> BaseModelAdapter:
     normalized = model_type.lower().lstrip(".")
     suffix = model_path.suffix.lower().lstrip(".")
+    # "other" type defers adapter selection to the actual file extension
     effective = normalized if normalized != "other" else suffix
 
     if effective in {"pkl", "pickle", "joblib"}:

@@ -17,6 +17,7 @@ function isCompleted(job) {
 }
 
 function getMongoId(value) {
+  // Handles both plain string IDs and the BSON $oid wrapper that MongoDB occasionally returns in raw queries
   if (!value) return "";
   if (typeof value === "string") return value;
   if (value.$oid) return value.$oid;
@@ -198,6 +199,7 @@ export default function History({ setPage }) {
   const [compareModal, setCompareModal] = useState(null);
 
   useEffect(() => {
+    // cancelled flag prevents setState on an unmounted component if the user navigates away mid-fetch
     let cancelled = false;
 
     async function fetchJobs() {
@@ -252,6 +254,7 @@ export default function History({ setPage }) {
     const resultId = getResultId(job);
     if (!resultId) throw new Error("This completed job does not have a result_id.");
 
+    // Avoid re-fetching the same result when the user toggles multiple jobs for comparison
     if (resultCache[resultId]) return resultCache[resultId];
 
     let response = await fetch(`${API_URL}/result/${resultId}`);

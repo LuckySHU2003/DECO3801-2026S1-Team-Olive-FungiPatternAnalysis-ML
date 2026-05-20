@@ -12,6 +12,7 @@ class TorchModelAdapter(BaseModelAdapter):
             import torch
         except ImportError as exc:
             raise ModelAdapterError("Torch model selected but torch is not installed. Install torch in the ML service environment.") from exc
+        # map_location="cpu" allows GPU-trained models to run on CPU-only inference servers
         self.model = torch.load(self.model_path, map_location="cpu")
 
     def predict(self, input_frame: pd.DataFrame, config: Dict[str, Any]) -> Any:
@@ -20,6 +21,7 @@ class TorchModelAdapter(BaseModelAdapter):
         except ImportError as exc:
             raise ModelAdapterError("Torch model selected but torch is not installed.") from exc
 
+        # eval() disables dropout and batch-norm for deterministic inference
         if hasattr(self.model, "eval") and callable(getattr(self.model, "eval")):
             self.model.eval()
             values = input_frame[["Time", "Voltage"]].to_numpy(dtype=np.float32)

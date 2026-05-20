@@ -13,6 +13,7 @@ export interface ResolvedModelMetadata {
 
 export class ModelRegistryService {
   async resolveModel(input: { name: string; type: string; selection?: string; version?: string; file_url?: string; storage_path?: string; metadata?: object }): Promise<ResolvedModelMetadata> {
+    // If the caller already supplies a direct URL, skip the MongoDB lookup entirely
     if (input.file_url || input.storage_path) {
       return {
         name: input.name,
@@ -29,6 +30,7 @@ export class ModelRegistryService {
     if (input.selection) query.selection = input.selection;
     if (input.version) query.version = input.version;
 
+    // Sort descending so re-uploaded models automatically supersede older versions
     const doc = await ModelMetadataModel.findOne(query).sort({ created_at: -1 });
     if (!doc) {
       throw new Error(`Model metadata not found for name=${input.name}, type=${input.type}${input.version ? `, version=${input.version}` : ''}. Upload/register the model first.`);

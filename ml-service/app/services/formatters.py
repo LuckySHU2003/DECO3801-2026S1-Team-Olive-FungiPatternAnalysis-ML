@@ -24,6 +24,7 @@ class IncompatibleModelOutputError(ValueError):
 
 
 def _to_python(value: Any) -> Any:
+    # numpy scalars and arrays are not JSON-serialisable; convert to native Python types before returning
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, (np.integer, np.floating)):
@@ -110,6 +111,7 @@ def format_detect_patterns(raw: Any, frame: pd.DataFrame, preprocessing_mode: st
 def format_custom_exploration(raw: Any, frame: pd.DataFrame, preprocessing: dict, config: dict, previous_run_id: str | None, previous_result: dict | None) -> CustomExplorationResponse:
     patterns = normalize_patterns(raw, frame)
     summary = pattern_summary(patterns)
+    # comparison is only built when a previous run is referenced, enabling diff analysis across runs
     comparison = None
     if previous_run_id or previous_result:
         prev_patterns = previous_result.get("patterns", []) if previous_result else []
@@ -141,6 +143,7 @@ def format_custom_exploration(raw: Any, frame: pd.DataFrame, preprocessing: dict
 
 
 def _extract_predictions(raw: Any) -> tuple[list[float], list[float] | None]:
+    # Handles multiple output key conventions used by different model implementations
     raw = _to_python(raw)
     if isinstance(raw, dict):
         if "predicted_voltage_window" in raw:
@@ -168,6 +171,7 @@ def format_predict_future(raw: Any, frame: pd.DataFrame, model_name: str, predic
     confidences = confidences[:len(predictions)]
 
     last_time = float(frame["Time"].iloc[-1])
+    # Median diff handles irregular sampling better than fixed step; fallback to 1.0 for single-row frames
     if len(frame) >= 2:
         step = float(frame["Time"].diff().dropna().median()) or 1.0
     else:

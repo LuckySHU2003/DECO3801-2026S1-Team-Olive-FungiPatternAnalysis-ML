@@ -147,6 +147,7 @@ function buildSignalAnalysis({
   const m = mean(values);
   const sd = stdDev(values);
   const sigma = Number(threshold) || 2.5;
+  // 0.35 scale factor dampens the threshold so lower-amplitude spikes are still flagged
   const thresholdLine = m + sigma * sd * 0.35;
 
   const spikes = [];
@@ -182,6 +183,7 @@ function buildSignalAnalysis({
   };
 }
 
+// Client-side visual preview only — not the ML model output. Uses linear trend + damped sine for roughness.
 function generatePrediction(points) {
   if (!points || points.length < 2) return [];
 
@@ -465,6 +467,7 @@ export default function App() {
     }
   };
 
+  // Re-runs whenever the dataset or any analysis config changes — powers the live chart preview
   const analysisSummary = useMemo(() => {
     return buildSignalAnalysis({
       rows: tableRows,

@@ -184,11 +184,11 @@ function ThreeScene({ selectedStep }) {
 function AnimatedSignalPanel({ selectedStep }) {
   const spikeCount =
     selectedStep === "preview"
-      ? 8
+      ? 4
       : selectedStep === "configure"
-        ? 5
+        ? 4
         : selectedStep === "interpret"
-          ? 6
+          ? 4
           : 4;
 
   const points =

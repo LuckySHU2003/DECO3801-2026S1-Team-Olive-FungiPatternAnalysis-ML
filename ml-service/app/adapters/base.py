@@ -25,6 +25,7 @@ class BaseModelAdapter(ABC):
 
 
 def call_model(model: Any, input_frame: pd.DataFrame, config: Dict[str, Any]) -> Any:
+    # Fallback chain: custom protocol → sklearn-style predict(frame, config) → sklearn predict(frame) → callable
     if hasattr(model, "run_inference"):
         return model.run_inference(input_frame, config)
     if hasattr(model, "predict"):

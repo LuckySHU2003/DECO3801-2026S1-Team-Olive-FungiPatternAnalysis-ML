@@ -22,11 +22,13 @@ async def download_to_cache(url: str, suffix_hint: str = "") -> Path:
 
     parsed = urlparse(url)
     suffix = Path(parsed.path).suffix or suffix_hint
+    # SHA-256 of the URL as the cache filename avoids path conflicts across different sources
     name = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24] + suffix
     target = cache_dir / name
     if target.exists() and target.stat().st_size > 0:
         return target
 
+    # Write to a temp file first, then atomically rename — prevents a partial download from being read
     fd, tmp_name = tempfile.mkstemp(prefix="download-", suffix=suffix, dir=cache_dir)
     os.close(fd)
     tmp_path = Path(tmp_name)
