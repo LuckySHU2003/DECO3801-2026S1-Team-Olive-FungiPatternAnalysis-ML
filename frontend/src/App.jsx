@@ -586,8 +586,24 @@ export default function App() {
   };
 
   if (!hasEntered) {
-    return <GetStarted onEnter={() => setHasEntered(true)} />;
-  }
+  return (
+    <GetStarted
+      onEnter={(targetPage = "workspace") => {
+        setPage(targetPage || "workspace");
+        setHasEntered(true);
+      }}
+    />
+  );
+}
+
+if (page === "garden") {
+  return (
+    <FungiGarden
+      setPage={setPage}
+      setHasEntered={setHasEntered}
+    />
+  );
+}
 
 
   // ── Authenticated view ──────────────────────────────────────────────────────
@@ -677,9 +693,6 @@ export default function App() {
             />
           )}
 
-          {page === "garden" && (
-            <FungiGarden key="garden" setPage={setPage} />
-          )}
         </AnimatePresence>
       </AppShell>
 
