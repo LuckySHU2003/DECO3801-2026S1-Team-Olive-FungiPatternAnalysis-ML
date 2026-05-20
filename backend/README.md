@@ -1,52 +1,85 @@
-# Backend README v2.0
+# Backend Guide
 
-This backend supports the Workspace workflow for uploading Time/Voltage datasets, creating asynchronous analysis jobs, processing jobs through a worker, calling the ML service, and returning results to the frontend.
+This backend powers the Workspace workflow for the FungiPatternAnalysis project. It handles Time/Voltage dataset uploads, asynchronous ML analysis jobs, result storage, and result delivery to the frontend.
 
-The backend is designed around three Workspace functions:
+The three supported Workspace analysis functions are:
 
-- Detect patterns
-- Custom exploration
-- Predict future behaviour
+- **Detect patterns** — identifies spikes, oscillations, and recurring signal patterns
+- **Custom exploration** — configurable analysis over a user-defined time range
+- **Predict future behaviour** — forecasts voltage values over a prediction window
 
-Correlation is intentionally excluded.
+> Correlation is intentionally excluded from the Workspace.
 
-## For ML Features, see /ml-service README.md
+`sameple_time_voltage.csv` is provided for testing and usage sample dataset.\
+For ML service internals, see [/ml-service/README.md](../ml-service/README.md).
 
-## What this backend does
+---
 
-The backend receives requests from the frontend, stores uploaded datasets in Supabase Storage, stores metadata and job records in MongoDB Atlas, pushes long-running tasks into Redis/BullMQ, and lets a worker process those jobs asynchronously.
+## API Documentation
 
-The normal flow is:
+API for backend can be available on starting server at: `http://localhost:5000/docs`
+
+---
+
+## Tech Stack
+
+The backend worker resolves real dataset and model metadata from MongoDB, generates Supabase signed URLs, and sends them to the Python FastAPI `ml-service`. The ML service performs real model inference and returns the result, which the worker stores in MongoDB.
+
+| Service | Role |
+|---|---|
+| **MongoDB Atlas** | Stores dataset metadata, model metadata, job records, and result documents |
+| **Redis Cloud** | Stores the BullMQ job queue — pending jobs, queue state, worker dispatch |
+| **Supabase Storage** | Stores the actual files — uploaded datasets and model binaries |
+| **Render** | Hosts and runs the backend API, backend worker, and Python ML service |
+
+### What MongoDB stores
+
+- `datasets` — metadata for uploaded CSV/XLSX files
+- `models` — metadata for uploaded ML model binaries
+- `jobs` — job status records for all Workspace tasks
+- `results` — inference result documents returned by the ML service
+
+MongoDB does **not** store actual file contents. File binaries live in Supabase Storage.
+
+### What Supabase stores
+
+- `datasets` bucket — uploaded CSV/XLSX dataset files
+- `models` bucket — model binaries (`.pkl`, `.joblib`, `.pt`, `.pth`, and other Python-compatible formats)
+
+### What Redis stores
+
+- Pending Workspace job payloads
+- BullMQ queue state
+- Worker task dispatch signals
+
+---
+
+## Architecture — Full Request Flow
 
 ```text
-Frontend uploads dataset
-→ Backend uploads file to Supabase
-→ Backend stores dataset metadata in MongoDB
-→ Frontend creates a Workspace job
-→ Backend stores job as pending in MongoDB
-→ Backend pushes job into Redis/BullMQ
-→ Worker consumes job
-→ Worker calls Python ML service
-→ ML service returns result payload
-→ Worker stores result in MongoDB
-→ Frontend polls job status
-→ Frontend fetches result
+Frontend / Postman
+  → backend API (Fastify, port 5000)
+      → MongoDB Atlas: create job record (status: pending)
+      → Redis Cloud: push job to BullMQ queue
+  → backend worker (BullMQ consumer)
+      → MongoDB: resolve dataset metadata
+      → MongoDB: resolve model metadata
+      → Supabase: generate signed URL for dataset file
+      → Supabase: generate signed URL for model file
+      → Python ML service (FastAPI, port 8001)
+          → downloads files from signed URLs
+          → loads model, runs inference
+          → returns structured result payload
+      → MongoDB: store result document
+      → MongoDB: update job status to completed
+  → Frontend polls GET /jobs/:jobId
+  → Frontend fetches GET /results/:resultId
+  → Frontend renders output
 ```
 
-## Required services
+---
 
-You need these services running or configured:
-
-```text
-MongoDB Atlas      Stores metadata, jobs, and results
-Redis Cloud        Stores BullMQ queue jobs
-Supabase Storage   Stores uploaded datasets and model binaries
-Node backend       Runs API endpoints
-Node worker        Processes queued jobs
-Python ML service  Handles mock or real model inference
-```
-
-## Environment variables
+## Environment Variables
 
 Create `backend/.env`:
 
@@ -58,7 +91,7 @@ CORS_ORIGIN=http://localhost:5173
 NODE_ENV=development
 
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database-name>
-REDIS_URL=redis://default:<password@<hostname>:<port>
+REDIS_URL=redis://default:<password>@<hostname>:<port>
 
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
@@ -73,33 +106,40 @@ OPENAI_API_KEY=your-openai-api-key
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-For production, change the sameple connection to your service url call.
+For production on Render, replace localhost URLs with your deployed service URLs:
 
-## Supabase setup
+```env
+CORS_ORIGIN=https://your-frontend.vercel.app
+ML_SERVICE_URL=https://your-ml-service.onrender.com
+```
 
-Create two Supabase Storage buckets:
+---
+
+## Supabase Setup
+
+Create two Storage buckets in your Supabase project:
 
 ```text
 datasets
 models
 ```
 
-Use `datasets` for uploaded CSV/XLSX files.
-Use `models` for model binaries such as `.pkl`, `.pt`, or other Python model files.
+- `datasets` — receives uploaded CSV/XLSX files via `POST /datasets/upload`
+- `models` — receives uploaded model binaries via `POST /models/upload`
 
-The backend stores only the file URL/path in MongoDB. It does not store file contents in MongoDB.
+The backend stores only metadata and file paths in MongoDB. File contents live exclusively in Supabase. The worker uses the stored `storage_path` to generate signed URLs at job processing time.
 
-## Redis setup
+---
 
-Redis is used by BullMQ as the queue backend.
+## Redis Setup
 
-If using Redis Cloud, your connection string should look like:
+Redis is used by BullMQ as the queue backend. For Redis Cloud, your connection string is:
 
 ```env
 REDIS_URL=redis://default:<password>@<host>:<port>
 ```
 
-If using TLS:
+If TLS is required:
 
 ```env
 REDIS_URL=rediss://default:<password>@<host>:<port>
@@ -111,187 +151,352 @@ If you see this warning:
 IMPORTANT! Eviction policy is volatile-lru. It should be "noeviction"
 ```
 
-The system can still work for MVP testing, but Redis should ideally use `noeviction` for production BullMQ usage.
+The system still functions for development and MVP testing, but production BullMQ usage requires `noeviction`.
 
-## Install dependencies
+---
 
-From the backend folder:
+## Installation
+
+Install backend dependencies:
 
 ```bash
 cd backend
 npm install
 ```
 
-For the ML service:
+Install ML service dependencies:
 
 ```bash
 cd ml-service
 python -m venv .venv
+
+# Windows
 .venv\Scripts\activate
+
+# Mac/Linux
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-On Mac/Linux, activate with:
+---
 
-```bash
-source .venv/bin/activate
-```
+## Running Locally
 
-## Running locally
+Start all three services in separate terminals.
 
-Open three terminals.
 
-Terminal 1: backend API
+**Terminal 1 — Backend API:**
 
 ```bash
 cd backend
-npm run dev
+npm run start:all
 ```
-
-Expected:
+This start 2 services on the same terminal.
+Expected output:
 
 ```text
 API listening on port 5000
 MongoDB connection exists
+Workspace worker started
 ```
-
-Terminal 2: backend worker
-
+Or alternatively separate 2 backend terminals:
+```bash
+cd backend
+npm run dev
+```
 ```bash
 cd backend
 npm run worker:dev
 ```
+See package.json for running commands detailed.
 
-Expected:
 
-```text
-MongoDB connection exists
-Workspace worker started
-```
-
-Terminal 3: ML service
+**Terminal 3 — Python ML Service:**
 
 ```bash
 cd ml-service
+.venv\Scripts\activate        # Windows
+# or: source .venv/bin/activate  (Mac/Linux)
 uvicorn app.main:app --reload --port 8001
 ```
 
-Check the ML docs:
+Service addresses:
 
 ```text
-http://localhost:8001/docs
+Backend API:  http://127.0.0.1:5000
+ML service:   http://127.0.0.1:8001
+ML API docs:  http://127.0.0.1:8001/docs
 ```
 
-Check backend health:
+---
 
-```text
-http://127.0.0.1:5000/health
+## Running Tests
+
+Run backend unit tests:
+
+```bash
+cd backend
+npm run test
+npm run build
 ```
 
-Expected response:
+Run ML service tests:
+
+```bash
+cd ml-service
+python -m pytest
+```
+
+Backend tests cover DTO validation, dataset service behaviour, Workspace job creation, job status transitions, result storage, and route response shapes. External services (MongoDB, Redis, Supabase, ML service) are mocked in unit tests.
+
+---
+
+## Manual API Testing (Postman)
+
+Use Postman to walk through the full v2.0 flow. All services must be running before starting.
+
+### Step 1 — Test backend health
+
+```
+GET http://127.0.0.1:5000/health
+```
+
+Expected:
+
+```json
+{ "ok": true }
+```
+
+### Step 2 — Test ML service health
+
+```
+GET http://127.0.0.1:8001/health
+```
+
+Expected:
 
 ```json
 {
-  "ok": true
+  "ok": true,
+  "service": "ml-service"
 }
 ```
 
-## Testing with Postman
+Minor differences in the health payload are acceptable as long as the endpoint confirms the ML service is alive.
 
-### 1. Upload dataset
+---
 
-Endpoint:
+### Step 3 — Upload a dataset
 
-```text
+> **Note:** Dummy test datasets (`dummy_detect`, `dummy_explore`, `dummy_predict`) already exist in Supabase. Reuse them to avoid duplicates. Upload only if you are running for the first time or need a fresh dataset.
+
+```
 POST http://127.0.0.1:5000/datasets/upload
 ```
 
-Postman body:
+Body → `form-data`:
 
-```text
-Body → form-data
-Key: file
-Type: File
-Value: sample_time_voltage.csv
+```
+Key: file    Type: File    Value: sample_time_voltage.csv
 ```
 
-The dataset should contain two columns:
+The CSV must contain at least a `Time` and `Voltage` column:
 
-```text
-Time, Voltage
+```csv
+Time,Voltage
+0,0.12
+1,0.18
+2,0.32
+3,0.25
+4,0.41
 ```
+
+Test datasets must always follow the `[Time][Column]` format (CSV or XLSX).
 
 Expected response:
 
 ```json
 {
-  "dataset_id": "string",
-  "name": "string",
-  "file_url": "string",
-  "created_at": "string"
+  "dataset_id": "someId",
+  "name": "dummy_dataset_name.csv",
+  "original_filename": "dummy_dataset_name.csv",
+  "source": "supabase",
+  "file_url": "...",
+  "storage_path": "...",
+  "schema": {},
+  "created_at": "2026-05-10T15:29:25.251Z"
 }
 ```
 
-After this, check:
+Copy the `dataset_id`. Verify in:
 
-```text
-MongoDB Atlas → datasets collection
-Supabase → Storage → datasets bucket
+- **MongoDB Atlas** → `datasets` collection — new metadata document
+- **Supabase Storage** → `datasets` bucket — uploaded file
+
+### Step 4 — List datasets
+
 ```
-
-You should see metadata in MongoDB and the actual uploaded file in Supabase.
-
-### 2. List datasets
-
-Endpoint:
-
-```text
 GET http://127.0.0.1:5000/datasets
 ```
 
+Expected: array of uploaded dataset metadata objects.
+
+### Step 5 — Get one dataset
+
+```
+GET http://127.0.0.1:5000/datasets/<dataset_id>
+```
+
+Expected: single dataset metadata record.
+
+---
+
+### Step 6 — Upload a model file
+
+In v2.0, do not use mock model metadata (e.g. `mock-rf-model`) for production-style testing. Upload a real Python-compatible model binary.
+
+> Upload models one-by-one only.
+
+The dummy models under `/ml-service/exported_models/` are trained by the standalone script `ml-service/train_dummy_models.py`. These are intentionally simple models used only to verify compatibility and deployment — not for accuracy.
+
+```
+POST http://127.0.0.1:5000/models/upload
+```
+
+Body → `form-data`:
+
+```
+Key: file        Type: File    Value: your_model.pkl / your_model.joblib / your_model.pt / your_model.pth
+Key: name        Type: Text    Value: pattern-detector-v1
+Key: type        Type: Text    Value: pkl
+Key: version     Type: Text    Value: v1
+Key: task_type   Type: Text    Value: detect_patterns   (or: custom_exploration / predict_future)
+```
+
 Expected response:
 
 ```json
 {
-  "datasets": []
+  "model_id": "someId",
+  "name": "pattern-detector-v1",
+  "type": "pkl",
+  "version": "v1",
+  "task_type": "detect_patterns",
+  "source": "supabase",
+  "file_url": "...",
+  "storage_path": "...",
+  "bucket": "models",
+  "metadata": {},
+  "created_at": "2026-05-10T15:39:07.848Z"
 }
 ```
 
-Use this to confirm uploaded datasets are available to the frontend.
+Copy the `model_id`. Verify in:
 
-### 3. Get one dataset
+- **MongoDB Atlas** → `models` collection — new metadata document
+- **Supabase Storage** → `models` bucket — uploaded model binary
 
-Endpoint:
+### Step 7 — List models
 
-```text
-GET http://127.0.0.1:5000/datasets/<dataset_id>
+```
+GET http://127.0.0.1:5000/models
 ```
 
-Expected response contains metadata for one dataset.
+Expected: array of uploaded model metadata objects.
 
-## Workspace jobs
+### Step 8 — Get one model
 
-Workspace jobs are asynchronous. When the frontend creates a job, the backend immediately returns a `job_id`. The frontend should then poll the job endpoint until the job is completed.
-
-The general frontend flow is:
-
-```text
-POST workspace job
-→ receive job_id
-→ poll GET /jobs/:jobId
-→ when completed, get result_id
-→ fetch GET /results/:resultId
+```
+GET http://127.0.0.1:5000/models/<model_id>
 ```
 
-## Detect patterns
+Expected: single model metadata record.
 
-Endpoint:
+---
 
-```text
+### Step 9 — Direct ML service test (optional diagnostic)
+
+This step tests whether the ML service can independently download files, load a model, and return a correctly shaped inference response, **bypassing the backend worker**. Use this to isolate ML service issues.
+
+You need a temporary signed URL for both the dataset and model files — generate these directly from the Supabase Storage UI. Do **not** use the registered `file_url` stored in MongoDB; those are permanent URLs, not signed URLs.
+
+```
+POST http://127.0.0.1:8001/ml/detect-patterns
+```
+
+Body → raw → JSON:
+
+```json
+{
+  "job_id": "local-ml-test-001",
+  "dataset": {
+    "source": "supabase",
+    "file_url": "PASTE_SIGNED_DATASET_URL_HERE",
+    "columns": {
+      "time": "Time",
+      "voltage": "Voltage"
+    }
+  },
+  "preprocessing": {
+    "mode": "raw",
+    "normalize": true,
+    "missing_value_strategy": "interpolate"
+  },
+  "detection_config": {
+    "pattern_types": ["spike", "oscillation"],
+    "threshold": 0.5,
+    "window_size": 20,
+    "min_interval": 5
+  },
+  "model": {
+    "name": "pattern-detector-v1",
+    "type": "pkl",
+    "version": "v1",
+    "file_url": "PASTE_SIGNED_MODEL_URL_HERE"
+  }
+}
+```
+
+Expected response shape:
+
+```json
+{
+  "job_id": "local-ml-test-001",
+  "task": "detect_patterns",
+  "detected_patterns": [
+    {
+      "pattern_id": "...",
+      "type": "...",
+      "start_time": "...",
+      "end_time": "...",
+      "snapshot": {},
+      "frequency": 0,
+      "amplitude": 0,
+      "interval": 0,
+      "confidence_score": 0.0
+    }
+  ],
+  "summary": {
+    "recurrence": {},
+    "averages": {}
+  }
+}
+```
+
+The exact pattern values depend on the uploaded model. If the model format or output is incompatible, the ML service should return a clear error — this is expected and confirms it is correctly rejecting incompatible files rather than silently returning fake output.
+
+---
+
+### Step 10 — Submit a detect-patterns job (full backend workflow)
+
+This runs the complete pipeline through the backend API → MongoDB → Redis → worker → ML service.
+
+```
 POST http://127.0.0.1:5000/workspace/jobs/detect-patterns
 ```
 
-Request body:
+Body → raw → JSON:
 
 ```json
 {
@@ -316,10 +521,10 @@ Request body:
     "min_interval": 5
   },
   "model": {
-    "name": "mock-rf-model",
-    "selection": "rf",
-    "type": "pkl",
-    "version": "v1"
+    "model_id": "PASTE_MODEL_ID_HERE",
+    "name": "YOUR_MODEL_NAME",
+    "type": "YOUR_MODEL_TYPE",
+    "version": "YOUR_MODEL_VERSION"
   }
 }
 ```
@@ -328,21 +533,35 @@ Expected immediate response:
 
 ```json
 {
-  "job_id": "string",
+  "job_id": "...",
   "type": "detect_patterns",
   "status": "pending"
 }
 ```
 
-## Custom exploration
+Copy the `job_id`.
 
-Endpoint:
+**What happens behind the scenes:**
 
-```text
+1. Backend validates the request DTO
+2. Backend creates a MongoDB job record (`status: pending`)
+3. Backend pushes the job to Redis/BullMQ
+4. Worker consumes the job
+5. Worker resolves dataset metadata from MongoDB
+6. Worker resolves model metadata from MongoDB
+7. Worker generates Supabase signed URLs for both the dataset and model files
+8. Worker calls the Python FastAPI ML service
+9. ML service downloads files via signed URLs, loads the model, runs inference, returns result
+10. Worker stores the result document in MongoDB
+11. Worker updates job status to `completed` with `result_id`
+
+### Step 11 — Submit a custom-exploration job
+
+```
 POST http://127.0.0.1:5000/workspace/jobs/custom-exploration
 ```
 
-Request body:
+Body → raw → JSON:
 
 ```json
 {
@@ -365,36 +584,30 @@ Request body:
     "window_size": 20,
     "time_range": {
       "start": 0,
-      "end": 120
-    },
-    "model_selection": "rf",
-    "compare_with_previous_run": false
+      "end": 100
+    }
+  },
+  "model": {
+    "model_id": "PASTE_MODEL_ID_HERE",
+    "name": "YOUR_MODEL_NAME",
+    "type": "YOUR_MODEL_TYPE",
+    "version": "YOUR_MODEL_VERSION"
   },
   "previous_run_id": null
 }
 ```
 
-Expected immediate response:
+Expected result (after polling) should include: `run_id`, `config_used`, `patterns`, `summary`, and optionally `comparison` if `previous_run_id` was supplied.
 
-```json
-{
-  "job_id": "string",
-  "type": "custom_exploration",
-  "status": "pending"
-}
+### Step 12 — Submit a predict-future job
+
+Use a model whose adapter output is compatible with future voltage prediction.
+
 ```
-
-If `compare_with_previous_run` is true, provide a valid previous result or run ID in `previous_run_id`.
-
-## Predict future behaviour
-
-Endpoint:
-
-```text
 POST http://127.0.0.1:5000/workspace/jobs/predict-future
 ```
 
-Request body:
+Body → raw → JSON:
 
 ```json
 {
@@ -413,219 +626,180 @@ Request body:
     "missing_value_strategy": "interpolate"
   },
   "prediction_config": {
-    "prediction_window": 20,
-    "model_selection": "lstm"
+    "prediction_window": 20
   },
   "model": {
-    "name": "mock-lstm-model",
-    "selection": "lstm",
-    "type": "pt",
-    "version": "v1"
+    "model_id": "PASTE_MODEL_ID_HERE",
+    "name": "YOUR_MODEL_NAME",
+    "type": "YOUR_MODEL_TYPE",
+    "version": "YOUR_MODEL_VERSION"
   }
 }
 ```
 
-Expected immediate response:
+Expected result (after polling) should include:
 
-```json
-{
-  "job_id": "string",
-  "type": "predict_future",
-  "status": "pending"
-}
+- `predicted_voltage_window`
+- `model_used`
+- `confidence_score`
+- `summary.start_time`
+- `summary.end_time`
+- `summary.min_predicted_voltage`
+- `summary.max_predicted_voltage`
+- `summary.average_predicted_voltage`
+- `summary.average_confidence_score`
+
+---
+
+### Step 13 — Poll job status
+
+After submitting any Workspace job, poll until `status` becomes `completed`:
+
 ```
-
-## Polling job status
-
-Endpoint:
-
-```text
 GET http://127.0.0.1:5000/jobs/<job_id>
 ```
 
 Possible statuses:
 
 ```text
-pending
-processing
-completed
-failed
+pending      Job is queued, waiting for the worker
+processing   Worker is currently running the job
+completed    Job finished successfully; result_id is available
+failed       Job failed; check worker and ML service logs
 ```
 
 Expected completed response:
 
 ```json
 {
-  "job_id": "string",
+  "job_id": "...",
   "type": "detect_patterns",
   "status": "completed",
-  "result_id": "string",
-  "created_at": "string"
+  "result_id": "...",
+  "created_at": "..."
 }
 ```
+
+Copy the `result_id`.
 
 If the status stays `pending`, check:
 
-```text
-1. Is npm run worker:dev running?
-2. Is REDIS_URL correct?
-3. Is ML_SERVICE_URL correct?
-4. Is the ML service running on port 8001?
+1. Is `npm run worker:dev` running?
+2. Is `REDIS_URL` correct and Redis reachable?
+3. Is the ML service running on port 8001?
+4. Check the worker terminal for errors
+
+### Step 14 — Fetch result
+
 ```
-
-## Fetching result
-
-Endpoint:
-
-```text
 GET http://127.0.0.1:5000/results/<result_id>
 ```
 
-Expected response:
+Expected response contains real ML service output stored by the worker. This should not be mock-generated data. The result comes from the ML service inference response.
 
-```json
-{
-  "result_id": "string",
-  "job_id": "string",
-  "type": "detect_patterns",
-  "output": {},
-  "summary": {},
-  "created_at": "string"
-}
-```
+---
 
-The frontend can render the `output` and `summary` however it wants.
+## Service Verification Checklist
 
-## Chat endpoint
+### MongoDB works if
 
-Have the placeholder for this version. Feature to be develop soon in future.
+- `datasets` collection contains uploaded dataset metadata documents
+- `models` collection contains uploaded model metadata documents
+- `jobs` collection contains created detect/custom/predict job records
+- `results` collection contains ML service output documents
+- MongoDB does **not** contain actual file contents — only metadata, IDs, status fields, storage paths, and result documents
 
-The chat service is designed to use OpenAI ChatCompletion. If `OPENAI_API_KEY` is missing, the service may return a stub response depending on the implementation.
+### Supabase works if
 
-## How to know each service is working
+- `datasets` bucket contains the uploaded CSV/XLSX files
+- `models` bucket contains the uploaded model binaries
+- The backend worker can generate signed URLs from the stored `storage_path` values
 
-MongoDB is working if:
+If the ML service cannot download files, check:
 
-```text
-Uploaded datasets appear in datasets collection
-Created jobs appear in jobs collection
-Completed results appear in results collection
-```
+1. Bucket name matches `SUPABASE_DATASETS_BUCKET` / `SUPABASE_MODELS_BUCKET` env vars
+2. `storage_path` saved in MongoDB matches the actual Supabase path
+3. Signed URL expiry — `SUPABASE_SIGNED_URL_EXPIRES_SECONDS` must be long enough for the ML job to complete
+4. `SUPABASE_SERVICE_ROLE_KEY` is set and valid
+5. File was actually uploaded successfully
 
-Redis is working if:
+### Redis/BullMQ works if
 
-```text
-A workspace job changes from pending to processing/completed
-Worker logs show completed job messages
-```
+- A Workspace job initially returns `{ "status": "pending" }`
+- The worker picks it up and updates it to `{ "status": "completed" }`
 
-Supabase is working if:
+If jobs stay `pending`, Redis or the worker is the issue.
 
-```text
-Uploaded files appear in the datasets bucket
-MongoDB dataset metadata contains file_url/storage_path
-```
+### ML service works if
 
-ML service is working if:
+1. `GET /health` returns `{ "ok": true, "service": "ml-service" }`
+2. Direct ML endpoint test (Step 9) successfully reads dataset and model URLs and returns a valid shaped response
+3. Backend job flow produces a non-mock result stored in MongoDB
+4. ML service returns clear errors for incompatible model formats instead of silently producing fake output
+5. Worker terminal logs show a successful HTTP call to the ML service
 
-```text
-Workspace jobs complete successfully
-Result output contains mock or real ML payload
-```
+### Backend API works if
 
-Backend API is working if:
+- `GET /health` returns `{ "ok": true }`
+- All Postman requests return the expected response shapes
 
-```text
-GET /health returns { "ok": true }
-Postman requests return expected responses
-```
+---
 
-## Running tests
+## Common Failure Cases
 
-From `backend/`:
+| Symptom | Likely Cause |
+|---|---|
+| **Missing dataset URL** | Worker did not resolve dataset metadata or failed to generate a signed URL |
+| **Missing model URL** | Model was not uploaded, metadata is missing in MongoDB, or signed URL generation failed |
+| **Invalid dataset columns** | Uploaded file does not contain `Time` and `Voltage` columns, or column names do not match exactly (case-sensitive) |
+| **Unsupported model format** | Model file type is not supported by the current ML adapter layer |
+| **Incompatible model output** | Model loaded successfully but its output shape does not match the expected format for the selected task |
+| **Job stuck at `pending`** | Backend API created the job but the worker did not process it — check Redis connection and worker terminal. Free version potentially block request payloads |
+| **Job `failed`** | Worker processed the job but ML service call or Supabase access failed — check both worker logs and ML service logs |
 
-```bash
-npm test
-```
 
-Tests are intended to cover:
+## Frontend Integration
 
-```text
-DTO validation
-Dataset service behaviour
-Workspace job creation
-Job status updates
-Result storage
-Route response behaviour
-```
-
-For unit tests, external services such as MongoDB, Redis, Supabase, and ML service should be mocked where possible.
-
-## Frontend integration
-
-In the frontend `.env`:
+In `frontend/.env`:
 
 ```env
 VITE_API_URL=http://localhost:5000
 ```
 
-In production:
 
-```env
-VITE_API_URL=https://your-backend-api.onrender.com
-```
-
-Frontend should not send local file paths. It should upload the file once, receive `dataset_id`, and use that `dataset_id` in Workspace job payloads.
-
-Correct frontend job flow:
+The frontend must **not** send local file paths to the backend. The correct flow is:
 
 ```text
-Upload file
-→ store dataset_id
-→ send workspace job payload with dataset_id
-→ receive job_id
-→ poll job status
-→ receive result_id
-→ fetch result
-→ render output
+Upload file → receive dataset_id
+  → submit Workspace job payload with dataset_id and model_id
+  → receive job_id
+  → poll GET /jobs/:jobId until completed
+  → receive result_id
+  → fetch GET /results/:resultId
+  → render output and summary
 ```
 
-## Render deployment notes
+---
 
-Deploy the system as separate Render services.
+## Chat Endpoint
 
-Backend API service:
+`POST /chat` is a placeholder in this version. The service is designed to use OpenAI ChatCompletion. If `OPENAI_API_KEY` is missing, it may return a stub response. Full implementation is planned for a future release.
 
-```bash
-npm install && npm run build && npm run start
-```
+---
 
-Worker service:
+## Final v2.0 Success Checklist
 
-```bash
-npm install && npm run build && npm run worker
-```
+A complete v2.0 pass requires all of the following:
 
-ML service:
-
-```bash
-pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Render environment variables should match local `.env`, but with production URLs:
-
-```env
-PORT=5000
-CORS_ORIGIN=https://your-frontend.vercel.app
-MONGODB_URI=...
-REDIS_URL=...
-SUPABASE_URL=...
-SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_DATASETS_BUCKET=datasets
-SUPABASE_MODELS_BUCKET=models
-ML_SERVICE_URL=https://your-ml-service.onrender.com
-OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-4o-mini
-```
-
-After deployment, update the frontend `VITE_API_URL` to point to the Render backend API.
+- [ ] Backend tests pass (`npm run test`)
+- [ ] Backend build passes (`npm run build`)
+- [ ] ML service tests pass (`python -m pytest`)
+- [ ] Backend health endpoint responds `{ "ok": true }`
+- [ ] ML service health endpoint responds `{ "ok": true, "service": "ml-service" }`
+- [ ] Dataset upload succeeds — file in Supabase, metadata in MongoDB
+- [ ] Model upload succeeds — binary in Supabase, metadata in MongoDB
+- [ ] Detect-patterns job completes with real ML service output
+- [ ] Custom-exploration job completes with real ML service output
+- [ ] Predict-future job completes with compatible model
+- [ ] Result fetched via `GET /results/:resultId` contains real inference data
+- [ ] No production mock inference is used
