@@ -557,11 +557,6 @@ export default function Results({ setRegenOpen, completedAnalysis, analysisData,
           title="Results Dashboard"
           desc="Completed backend results from pattern recognition, custom exploration, and prediction."
         />
-
-        <Button type="button" variant="outline" className="rounded-2xl" disabled>
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
       </div>
 
       <Tabs defaultValue="pattern-recognition" className="mt-6">
