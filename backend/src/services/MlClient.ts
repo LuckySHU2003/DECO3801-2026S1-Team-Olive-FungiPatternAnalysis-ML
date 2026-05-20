@@ -9,6 +9,7 @@ const endpointMap: Record<WorkspaceJobType, string> = {
 
 export class MlClient {
   async run(type: WorkspaceJobType, payload: object) {
+    // AbortController cancels the in-flight fetch if the ML service exceeds the configured timeout
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), env.ML_REQUEST_TIMEOUT_MS);
 

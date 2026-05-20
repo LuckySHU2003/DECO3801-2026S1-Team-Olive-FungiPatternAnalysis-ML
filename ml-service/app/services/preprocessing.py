@@ -21,6 +21,7 @@ def preprocess_time_voltage(frame: pd.DataFrame, config: PreprocessingConfig) ->
     if data.empty:
         raise ValueError("Dataset has no usable Time/Voltage rows after preprocessing")
 
+    # Linear polyfit removes slow baseline drift so the model sees only the bioelectrical signal
     if config.mode == "detrended":
         x = np.arange(len(data), dtype=float)
         if len(data) >= 2:
@@ -28,6 +29,7 @@ def preprocess_time_voltage(frame: pd.DataFrame, config: PreprocessingConfig) ->
             trend = np.polyval(coeffs, x)
             data["Voltage"] = data["Voltage"].to_numpy(dtype=float) - trend
 
+    # Population std (ddof=0) for z-score normalisation; std==0 guard prevents NaN on flat signals
     if config.normalize:
         std = float(data["Voltage"].std(ddof=0))
         mean = float(data["Voltage"].mean())

@@ -12,6 +12,7 @@ const ModelSchema = new Schema({
   metadata: { type: Schema.Types.Mixed }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
+// Composite index mirrors the lookup in ModelRegistryService.resolveModel — name + type + version + selection
 ModelSchema.index({ name: 1, type: 1, version: 1, selection: 1 });
 
 export const ModelMetadataModel = mongoose.model('ModelMetadata', ModelSchema);

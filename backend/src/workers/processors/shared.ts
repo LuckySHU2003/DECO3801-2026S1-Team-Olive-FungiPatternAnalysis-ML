@@ -27,8 +27,10 @@ export async function prepareMlPayload(jobId: string, requestPayload: any) {
     dataset: {
       ...requestPayload.dataset,
       source: requestPayload.dataset?.source ?? 'supabase',
+      // Default column mapping: the ML service requires exactly "Time" and "Voltage" keys
       columns: requestPayload.dataset?.columns ?? { time: 'Time', voltage: 'Voltage' }
     },
+    // Default preprocessing when the caller omits it: normalize and interpolate missing values
     preprocessing: requestPayload.preprocessing ?? {
       mode: 'raw',
       normalize: true,

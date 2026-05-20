@@ -10,6 +10,7 @@ _client: Any = None
 
 def _get_db():
     global _client
+    # Lazy init avoids a connection attempt at import time when MONGODB_URI may not yet be set
     if _client is None:
         if not settings.mongodb_uri:
             raise ValueError("MONGODB_URI is not set — cannot resolve dataset_id/model_id from MongoDB")
@@ -25,6 +26,7 @@ async def resolve_dataset(dataset_id: str) -> Dict[str, Any]:
     doc: Optional[Dict] = None
     try:
         from bson import ObjectId
+        # Try ObjectId first; falls back to string lookup for records using a separate dataset_id field
         doc = await collection.find_one({"_id": ObjectId(dataset_id)})
     except Exception:
         pass

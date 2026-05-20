@@ -718,6 +718,7 @@ export default function MainWorkspace({
     setXRange([xRangeLimit.min, xRangeLimit.max]);
   }, [xRangeLimit]);
 
+  // Initialise the time-range slider to the full dataset extent the first time a dataset is loaded
   useEffect(() => {
     if (!xRangeLimit) return;
 
@@ -793,6 +794,7 @@ export default function MainWorkspace({
   };
 
   {/* Dataset validation helpers */ }
+  // Enforces strict two-column format (Time + one signal column) required by the ML service
   const validateDatasetRows = (rows) => {
     const cleanedRows = rows
       .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? "").trim()) : []))
@@ -1156,6 +1158,7 @@ export default function MainWorkspace({
     return job;
   };
 
+  // Polls the backend every 1500ms until the job reaches a terminal state (completed/failed)
   const pollWorkspaceJob = async ({ job, key }) => {
     const jobId = getJobId(job);
 
@@ -1198,6 +1201,7 @@ export default function MainWorkspace({
   };
 
   const fetchResultForJob = async (jobStatus) => {
+    // Some job responses embed the result inline; only hit /results/:id when it is absent
     const inlineResult = jobStatus?.result || jobStatus?.data?.result;
 
     if (inlineResult) {

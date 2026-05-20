@@ -125,6 +125,7 @@ function mapPredictionSeries(inputData, predictionWindow) {
 
   if (original.length && predicted.length) {
     const lastOriginal = original[original.length - 1];
+    // Connector point bridges the gap between the original and predicted series so the chart line is continuous
     return {
       original,
       predicted: [
@@ -408,6 +409,7 @@ function InterpretationPanel({ title, result, mode }) {
 
     const summary = getSummary(result);
 
+    // Only the summary is sent to the backend — full pattern arrays are omitted to reduce token usage
     if (!result || !summary || Object.keys(summary).length === 0) {
       setError("No summary data available for interpretation.");
       return;
@@ -630,6 +632,7 @@ export default function Results({ setRegenOpen, completedAnalysis, analysisData,
   );
 }
 
+// Thin wrapper that lets App.jsx import a stable named export without coupling to the internal Results layout
 export function AnalysisView(props) {
   return (
     <div className="space-y-12">

@@ -65,6 +65,7 @@ export class DatasetService {
   }
 
   async getDatasetPreviewById(id: string) {
+    // $or supports both the legacy string dataset_id field and the primary MongoDB ObjectId _id
     const query = mongoose.Types.ObjectId.isValid(id)
       ? { $or: [{ dataset_id: id }, { _id: new mongoose.Types.ObjectId(id) }] }
       : { dataset_id: id };
@@ -104,6 +105,7 @@ export class DatasetService {
 
     const headers = rawRows[0];
 
+    // Cap at 500 rows — preview is for inspection only; the ML service receives the full file via signed URL
     const rows = rawRows.slice(1, 501).map((row) => {
       const output: Record<string, string | number> = {};
 
@@ -111,6 +113,7 @@ export class DatasetService {
         const rawValue = row[index] ?? '';
         const numericValue = Number(rawValue);
 
+        // Column 0 (Time) is kept as a string; all subsequent columns are coerced to numeric
         output[header] =
           index > 0 && rawValue !== '' && !Number.isNaN(numericValue)
             ? numericValue
@@ -139,6 +142,7 @@ export class DatasetService {
     if (!dataset) return false;
 
     if (dataset.storage_path) {
+      // Supabase storage_path may include the bucket name as prefix; strip it before calling .remove()
       const objectPath = dataset.storage_path.replace(/^datasets\//, '');
 
       const { error } = await supabase.storage

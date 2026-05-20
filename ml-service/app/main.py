@@ -21,6 +21,7 @@ app = FastAPI(title="ML Service", version="2.0.0")
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
     logger.exception("Request failed: %s", exc)
+    # Known domain errors (bad input, unsupported model format) return 422; generic ValueErrors return 400
     status = 422 if isinstance(exc, (DatasetValidationError, ModelAdapterError, RemoteFileError, IncompatibleModelOutputError)) else 400
     return JSONResponse(status_code=status, content={"error": exc.__class__.__name__, "message": str(exc)})
 

@@ -37,12 +37,14 @@ async function processWorkspaceJob(data: { job_id: string; type: string }) {
 async function main() {
   await connectMongo();
 
+  // concurrency: 3 — limits parallel ML inference calls; constrained by ML service capacity, not Redis
   const worker = new Worker('workspace-jobs', async (job) => processWorkspaceJob(job.data), {
     connection: redisConnection,
     concurrency: 3
   });
 
   worker.on('completed', (job) => console.log(`Worker completed ${job.name}:${job.id}`));
+  // Persist the failure into MongoDB so the frontend can surface it via GET /jobs/:id
   worker.on('failed', async (job, error) => {
     console.error(`Worker failed ${job?.name}:${job?.id}`, error);
     const appJobId = job?.data?.job_id;
