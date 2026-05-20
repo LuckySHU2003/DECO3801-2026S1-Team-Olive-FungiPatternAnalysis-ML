@@ -464,6 +464,8 @@ export default function MainWorkspace({
   {/* Dashboard Summary state and effects */ }
   const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
   console.log("Using API URL:", API_URL);
+  const ML_URL = import.meta.env.VITE_ML_URL?.replace(/\/$/, "");
+  console.log("Using API URL:", ML_URL);
   const [dashboardDatasets, setDashboardDatasets] = useState([]);
   const [dashboardModels, setDashboardModels] = useState([]);
   const [dashboardLoading, setDashboardLoading] = useState(false);
