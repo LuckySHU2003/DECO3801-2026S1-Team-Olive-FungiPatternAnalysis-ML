@@ -39,7 +39,7 @@ async function main() {
 
   const worker = new Worker('workspace-jobs', async (job) => processWorkspaceJob(job.data), {
     connection: redisConnection,
-    concurrency: 2
+    concurrency: 3
   });
 
   worker.on('completed', (job) => console.log(`Worker completed ${job.name}:${job.id}`));

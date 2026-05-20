@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SectionTitle from "@/components/shared/SectionTitle";
 
+const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+
 function getSummary(result) {
   return result?.summary || result?.output?.summary || {};
 }
@@ -393,7 +395,56 @@ function ResultChart({ inputData = [], patterns = [], predictionWindow = [], mod
   );
 }
 
-function InterpretationPanel({ setRegenOpen, title, text }) {
+function InterpretationPanel({ title, result, mode }) {
+  const [interpretation, setInterpretation] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const generateInterpretation = async () => {
+    if (!API_URL) {
+      setError("Missing VITE_API_URL.");
+      return;
+    }
+
+    const summary = getSummary(result);
+
+    if (!result || !summary || Object.keys(summary).length === 0) {
+      setError("No summary data available for interpretation.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setInterpretation("");
+
+    try {
+      const response = await fetch(`${API_URL}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          result_id: result?.result_id,
+          result_type: result?.type || mode,
+          summary,
+          message: "Interpret this backend result summary for a researcher.",
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || "Failed to generate interpretation.");
+      }
+
+      setInterpretation(payload?.answer || "No interpretation returned.");
+    } catch (err) {
+      setError(err.message || "Failed to generate interpretation.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="rounded-3xl">
       <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -401,14 +452,18 @@ function InterpretationPanel({ setRegenOpen, title, text }) {
           <CardTitle>{title}</CardTitle>
           <p className="mt-1 text-sm text-slate-500">Backend result interpretation for this tab.</p>
         </div>
-        <Button variant="outline" className="rounded-2xl" onClick={() => setRegenOpen?.(true)}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Regenerate
+        <Button variant="outline" className="rounded-2xl" onClick={generateInterpretation} disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "Generating..." : "Generate interpretation"}
         </Button>
       </CardHeader>
       <CardContent>
         <div className="min-h-[150px] rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
-          {text || "No generated interpretation is available yet."}
+          {loading
+            ? "Generating backend interpretation. This may take a few seconds..."
+            : error
+              ? error
+              : interpretation || "No interpretation generated yet. Click Generate interpretation to run the backend ChatCompletion module."}
         </div>
       </CardContent>
     </Card>
@@ -436,18 +491,7 @@ function predictionSummaryCards(summary, result) {
   ];
 }
 
-{/* Temporary holder for ChatCompletion Module */}
-function buildInterpretation(type, result) {
-  const summary = getSummary(result);
-  if (!result) return "No result has been loaded for this tab yet.";
-
-  if (type === "prediction") {
-    return `Predicted voltage runs from time ${formatNumber(summary.start_time)} to ${formatNumber(summary.end_time)}. The predicted voltage range is ${formatNumber(summary.min_predicted_voltage)} to ${formatNumber(summary.max_predicted_voltage)}, with an average predicted voltage of ${formatNumber(summary.average_predicted_voltage)}.`;
-  }
-
-  return `The backend detected ${formatNumber(summary.total_patterns)} pattern(s). Recurrence: ${formatRecurrence(summary.recurrence)}. Average frequency is ${formatNumber(summary.average_frequency)}, average amplitude is ${formatNumber(summary.average_amplitude)}, and average interval is ${formatNumber(summary.average_interval)}.`;
-}
-
+{/* ChatCompletion Module */}
 function ResultTabLayout({ result, inputData, mode, graphTitle, graphDescription, cards, interpretationTitle, setRegenOpen }) {
   const patterns = getPatterns(result);
   const predictionWindow = getPredictionWindow(result);
@@ -470,9 +514,9 @@ function ResultTabLayout({ result, inputData, mode, graphTitle, graphDescription
       </div>
 
       <InterpretationPanel
-        setRegenOpen={setRegenOpen}
         title={interpretationTitle}
-        text={buildInterpretation(mode, result)}
+        result={result}
+        mode={mode}
       />
     </div>
   );

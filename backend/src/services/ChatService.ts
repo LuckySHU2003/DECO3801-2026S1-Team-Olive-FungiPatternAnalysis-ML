@@ -97,32 +97,34 @@ export class ChatService {
       baseURL: "https://openrouter.ai/api/v1",
     });
 
-    const completion = await client.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
-      temperature: 0.45,
-      max_tokens: 2000,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt(),
-        },
-        {
-          role: "user",
-          content: `Here is the backend result summary data. Interpret only the summary values provided:\n\n${JSON.stringify(
-            combinedData,
-            null,
-            2
-          )}`,
-        },
-      ],
-    });
-    console.log("OpenRouter completion:", JSON.stringify(completion, null, 2));
+    try {
+      const completion = await client.chat.completions.create({
+        model: process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
+        temperature: 0.45,
+        max_tokens: 1000,
+        messages: [
+          { role: "system", content: buildSystemPrompt() },
+          {
+            role: "user",
+            content: `Here is the backend result summary data:\n\n${JSON.stringify(combinedData, null, 2)}`,
+          },
+        ],
+      });
 
-    const answer = completion.choices[0]?.message?.content ?? '{"patternAnalysis":"No response generated.","predictionAnalysis":"No response generated."}';
+      const answer =
+        completion?.choices?.[0]?.message?.content ||
+        "No interpretation response generated.";
 
-    return {
-      answer
-    };
+      return { answer };
+    } catch (error: any) {
+      if (error?.status === 429) {
+        return {
+          answer:
+            "The AI interpretation service is temporarily rate-limited. Please wait a short moment and try again.",
+        };
+      }
+
+      throw error;
+    }
   }
 }
