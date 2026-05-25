@@ -1,0 +1,18 @@
+{
+  "cv_accuracy_mean": 0.928374655647383,
+  "cv_accuracy_std": 0.10129353339311423,
+  "val_accuracy": 1.0,
+  "test_accuracy": 1.0,
+  "train_windows": 484,
+  "val_windows": 100,
+  "test_windows": 100,
+  "window_size": 64,
+  "classes": [
+    "normal",
+    "spike"
+  ],
+  "label_distribution_train": {
+    "normal": 458,
+    "spike": 26
+  }
+}

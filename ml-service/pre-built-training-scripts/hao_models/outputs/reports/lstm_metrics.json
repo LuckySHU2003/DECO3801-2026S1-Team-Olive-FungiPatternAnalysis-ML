@@ -1,0 +1,13 @@
+{
+  "val_mae_scaled": 0.007901239826908811,
+  "val_rmse_scaled": 0.010888584569764385,
+  "test_mae_scaled": 0.006943464398340638,
+  "test_rmse_scaled": 0.009054464908601411,
+  "train_sequences": 476,
+  "val_sequences": 88,
+  "test_sequences": 88,
+  "input_window": 128,
+  "output_window": 20,
+  "mlp_iterations": 83,
+  "note": "MAE/RMSE are in MinMaxScaler([-1,1]) space, not raw voltage."
+}

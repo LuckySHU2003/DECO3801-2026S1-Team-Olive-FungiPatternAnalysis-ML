@@ -7,6 +7,9 @@ Usage:
     python training/train_lstm_predict_future.py \
         --input "record-mfs2-2026-03-13-04-32-17 Lions mane c2000-Studio3.xlsx"
 
+    e.g.
+    python training/train_lstm_predict_future.py --input "data.xlsx" --window-size 128 --prediction-window 20 --num-best-examples 5
+
 Outputs:
     outputs/models/lstm_predict_future.pkl  -- runtime artifact for Supabase
     outputs/reports/lstm_metrics.json       -- local metrics only
