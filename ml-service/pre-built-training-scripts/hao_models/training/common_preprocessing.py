@@ -141,6 +141,72 @@ def resize_to(window: np.ndarray, target_size: int) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Visualisation helpers  (training-only — lazy matplotlib import)
+# ---------------------------------------------------------------------------
+
+def plot_raw_signal(
+    df: pd.DataFrame,
+    out_path: str,
+    title: str = "Raw ADC Channels",
+) -> None:
+    """Four-panel time-series plot of all ADC channels, saved to out_path."""
+    try:
+        import matplotlib.pyplot as plt
+        plt.switch_backend("agg")
+    except ImportError:
+        return
+    colors = ["#2ca02c", "#c7a917", "#e07b39", "#d62728"]
+    t = df["seconds"] if "seconds" in df.columns else pd.Series(range(len(df)))
+    fig, axes = plt.subplots(len(TRAIN_ADC_COLS), 1, figsize=(13, 8), sharex=True)
+    for ax, col, color in zip(axes, TRAIN_ADC_COLS, colors):
+        if col not in df.columns:
+            continue
+        ax.plot(t, df[col], color=color, linewidth=0.7, alpha=0.9)
+        ax.set_ylabel("V", fontsize=8)
+        ax.set_title(col, fontsize=9, loc="left", pad=2)
+        ax.grid(True, alpha=0.25, linewidth=0.5)
+    axes[-1].set_xlabel("Time (s)")
+    fig.suptitle(title, fontsize=12, fontweight="bold")
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Plot] {out_path}")
+
+
+def plot_data_split(
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    out_path: str,
+) -> None:
+    """Single-channel signal coloured by train / val / test region."""
+    try:
+        import matplotlib.pyplot as plt
+        plt.switch_backend("agg")
+    except ImportError:
+        return
+    col = next((c for c in TRAIN_ADC_COLS if c in train_df.columns), None)
+    if col is None or "seconds" not in train_df.columns:
+        return
+    fig, ax = plt.subplots(figsize=(13, 3.5))
+    for part, label, color in [
+        (train_df, f"Train  {len(train_df):,} rows", "#1f77b4"),
+        (val_df,   f"Val    {len(val_df):,} rows",   "#ff7f0e"),
+        (test_df,  f"Test   {len(test_df):,} rows",  "#d62728"),
+    ]:
+        ax.plot(part["seconds"], part[col], color=color, linewidth=0.8, label=label)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Voltage")
+    ax.set_title(f"Chronological Train / Val / Test Split  —  {col}", fontweight="bold")
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(True, alpha=0.25)
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Plot] {out_path}")
+
+
+# ---------------------------------------------------------------------------
 # Feature extraction & pseudo-labelling
 # ---------------------------------------------------------------------------
 

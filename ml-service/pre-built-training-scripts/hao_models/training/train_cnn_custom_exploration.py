@@ -22,8 +22,17 @@ from typing import Any, Dict, List, Optional
 import cloudpickle
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    _HAS_PLOT = True
+except ImportError:
+    _HAS_PLOT = False
 
 sys.path.insert(0, str(Path(__file__).parent))
 from common_preprocessing import (
@@ -35,6 +44,8 @@ from common_preprocessing import (
     load_training_file,
     make_sliding_windows,
     parse_training_time,
+    plot_data_split,
+    plot_raw_signal,
     preprocess_inference_frame,
     resize_to,
 )
@@ -135,6 +146,90 @@ class CNNPatternWrapper:
 
 
 # ---------------------------------------------------------------------------
+# Plot helpers
+# ---------------------------------------------------------------------------
+
+_PATTERN_COLORS = {"normal": "#2ca02c", "spike": "#d62728", "drop": "#1f77b4", "unstable": "#ff7f0e"}
+
+
+def _save_cnn_plots(
+    mlp: MLPClassifier,
+    le: LabelEncoder,
+    X_test_s: np.ndarray,
+    y_test_enc: np.ndarray,
+    classes: np.ndarray,
+    counts: np.ndarray,
+    plots_dir: Path,
+) -> None:
+    if not _HAS_PLOT:
+        return
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    class_names = le.classes_.tolist()
+
+    # Label distribution
+    fig, ax = plt.subplots(figsize=(6, 4))
+    bar_colors = [_PATTERN_COLORS.get(c, "steelblue") for c in classes]
+    bars = ax.bar(classes, counts, color=bar_colors, edgecolor="white")
+    ax.set_title("Training Label Distribution (CNN)", fontweight="bold")
+    ax.set_ylabel("Window count")
+    ax.set_xlabel("Pattern type")
+    for bar, n in zip(bars, counts):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(counts) * 0.01,
+                str(n), ha="center", va="bottom", fontsize=10)
+    plt.tight_layout()
+    fig.savefig(plots_dir / "cnn_03_label_distribution.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Plot] {plots_dir / 'cnn_03_label_distribution.png'}")
+
+    # Training loss curve (+ validation score when early_stopping=True)
+    if hasattr(mlp, "loss_curve_") and mlp.loss_curve_:
+        fig, ax1 = plt.subplots(figsize=(8, 4))
+        ax1.plot(mlp.loss_curve_, color="steelblue", linewidth=1.5, label="Training loss")
+        ax1.set_xlabel("Iteration")
+        ax1.set_ylabel("Cross-entropy loss", color="steelblue")
+        ax1.tick_params(axis="y", labelcolor="steelblue")
+        if hasattr(mlp, "validation_scores_") and mlp.validation_scores_:
+            ax2 = ax1.twinx()
+            ax2.plot(mlp.validation_scores_, color="darkorange", linewidth=1.5,
+                     linestyle="--", label="Val accuracy")
+            ax2.set_ylabel("Validation accuracy", color="darkorange")
+            ax2.tick_params(axis="y", labelcolor="darkorange")
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=9)
+        else:
+            ax1.legend(loc="upper right")
+        ax1.set_title("CNN (MLP) Training Loss Curve", fontweight="bold")
+        ax1.grid(True, alpha=0.3)
+        plt.tight_layout()
+        fig.savefig(plots_dir / "cnn_04_loss_curve.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"[Plot] {plots_dir / 'cnn_04_loss_curve.png'}")
+
+    # Confusion matrix on test set
+    y_pred = mlp.predict(X_test_s)
+    cm = confusion_matrix(y_test_enc, y_pred)
+    fig, ax = plt.subplots(figsize=(5, 4))
+    im = ax.imshow(cm, interpolation="nearest", cmap="Blues")
+    plt.colorbar(im, ax=ax)
+    ticks = np.arange(len(class_names))
+    ax.set_xticks(ticks); ax.set_yticks(ticks)
+    ax.set_xticklabels(class_names, rotation=30, ha="right")
+    ax.set_yticklabels(class_names)
+    thresh = cm.max() / 2.0
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, str(cm[i, j]), ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black", fontsize=11)
+    ax.set_ylabel("True label"); ax.set_xlabel("Predicted label")
+    ax.set_title("CNN Confusion Matrix (Test Set)", fontweight="bold")
+    plt.tight_layout()
+    fig.savefig(plots_dir / "cnn_05_confusion_matrix.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Plot] {plots_dir / 'cnn_05_confusion_matrix.png'}")
+
+
+# ---------------------------------------------------------------------------
 # Training helpers
 # ---------------------------------------------------------------------------
 
@@ -182,14 +277,18 @@ def main() -> None:
     out = Path(args.output_dir)
     (out / "models").mkdir(parents=True, exist_ok=True)
     (out / "reports").mkdir(parents=True, exist_ok=True)
+    plots_dir = out / "plots"
 
     print(f"[CNN] Loading: {args.input}")
     df = load_training_file(args.input)
     df = parse_training_time(df)
     df = clean_adc_columns(df, clip_quantile=0.01 if args.clip_outliers else None)
 
+    plot_raw_signal(df, str(plots_dir / "cnn_01_raw_signal.png"), title="Raw ADC Channels — CNN Training")
+
     train_df, val_df, test_df = chronological_split(df)
     print(f"[CNN] Split: train={len(train_df)}, val={len(val_df)}, test={len(test_df)}")
+    plot_data_split(train_df, val_df, test_df, str(plots_dir / "cnn_02_data_split.png"))
 
     all_train_v = np.concatenate(
         [train_df[c].to_numpy(dtype=float) for c in TRAIN_ADC_COLS]
@@ -239,6 +338,8 @@ def main() -> None:
     val_acc = float(np.mean(mlp.predict(X_val_s) == y_val_enc))
     test_acc = float(np.mean(mlp.predict(X_test_s) == y_test_enc))
     print(f"[CNN] Val={val_acc:.4f}  Test={test_acc:.4f}")
+
+    _save_cnn_plots(mlp, le, X_test_s, y_test_enc, classes, counts, plots_dir)
 
     wrapper = CNNPatternWrapper(mlp, scaler, le, window_size, 0.5)
 
